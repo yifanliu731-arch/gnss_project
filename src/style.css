@@ -1,0 +1,81 @@
+/* ========== 全局样式 — 淡蓝色海洋主题 ========== */
+
+:root {
+  --bg-primary: #e8f4fd;
+  --bg-white: #ffffff;
+  --text-primary: #1a2b3c;
+  --text-secondary: #4a6a8a;
+  --border-color: #c8dfef;
+  --sidebar-bg: #0d3b66;
+  --sidebar-hover: #145a8c;
+  --sidebar-active: #1a7ab5;
+  --header-bg: #0a2d4d;
+  --card-header-bg: #f0f7fc;
+  --accent-blue: #2589d0;
+  --accent-light: #d4e7f7;
+  --scrollbar-thumb: #b0cfe0;
+
+  --font-sans: 'Segoe UI', system-ui, -apple-system, Roboto, sans-serif;
+  --font-mono: 'Cascadia Code', Consolas, monospace;
+
+  font: 15px/1.5 var(--font-sans);
+  color: var(--text-primary);
+  background: var(--bg-primary);
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ========== 基础重置 ========== */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg-primary);
+}
+
+/* ========== 主应用容器：全屏 flex 列 ========== */
+#app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: var(--bg-white);
+}
+
+/* ========== 滚动条美化 ========== */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #8db8d0;
+}
+
+/* ========== 通用排版 ========== */
+h1, h2, h3, h4 {
+  font-family: var(--font-sans);
+  margin: 0;
+}
+
+p {
+  margin: 0;
+  line-height: 1.6;
+}
+
+code {
+  font-family: var(--font-mono);
+}
+:root{--el-color-primary:#277e85;--el-color-primary-light-3:#699fa4;--el-color-primary-light-5:#93babe;--el-color-primary-light-7:#bdd6d8;--el-color-primary-light-9:#edf5f5;--el-color-primary-dark-2:#1c6169;--el-border-radius-base:7px;--el-text-color-primary:#254650;--el-text-color-regular:#5d737c;--el-border-color:#d8e3e6;--el-fill-color-blank:#fff;--el-font-family:'Segoe UI','Microsoft YaHei',sans-serif}button:focus-visible{outline:2px solid #277e85;outline-offset:3px}

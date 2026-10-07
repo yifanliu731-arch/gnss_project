@@ -1,0 +1,25 @@
+{
+  "case": "large_circle_cross",
+  "delay_rows": 4380,
+  "gnss_rows": 28227,
+  "beacon_ids": [
+    2,
+    5,
+    6
+  ],
+  "source_files": {
+    "research/outputs/risk_design/field_cross_combinations_20261003/large_circle/measured_observations.csv": "4db76328dd4935ae4e467d21c5df5b3941d1d871e480f0ff60417db052ce0e84",
+    "data/user_gnss_imu_55.csv": "152afeeb0dee7e7158884d7bd79b8d9dba7c16ab2fe6a226543f85bb9e4b2ae7",
+    "data/user_gnss_imu_circle_big.csv": "e7e2fd38757dc9caa1cfd93a03698ad4b8d15e05c715c09b7605eca9cc9cfb3d",
+    "data/template_ssp.csv": "d02ff72b22f1a46e6ec13c49a1a968c807f6a7012fca508a4d5f34a7a09c59e1"
+  },
+  "export": "Original acoustic UTC/ID/one-way delay. Raw navigation rows within 45 s of accepted pings, sorted and deduplicated by epoch; no position fitting or UTC compression. SSP copied unchanged.",
+  "max_navigation_bracket_s": 2.0,
+  "first_utc": "2021-05-01T12:49:50.288000Z",
+  "last_utc": "2021-05-03T01:46:30.020000Z",
+  "files": {
+    "gnss.csv": "45c94e43ddada1552d2d6a1d87907aeb26594cde28ec1d876c6c7c50c329846e",
+    "delay.csv": "faabf99aae45c3d153e55a8a5ee1409d52c1ac94f4098e8af675af2bbfaee7a4",
+    "ssp.csv": "d02ff72b22f1a46e6ec13c49a1a968c807f6a7012fca508a4d5f34a7a09c59e1"
+  }
+}

@@ -1,0 +1,13 @@
+<template><div><h3>{{ t("Design scores & simulation outcomes") }}</h3><p>{{ t("The upper chart guides route selection. The lower chart shows errors from this single random realisation, not repeated-trial MSE.") }}</p><div ref="host" class="comparison-chart" role="img" :aria-label="t(&quot;Candidate design risk and simulated 3D error versus complete survey duration&quot;)"></div></div></template>
+<script setup lang="ts">
+import { t, locale, setLocalizedOption } from "../i18n"
+import {onMounted,onBeforeUnmount,ref,watch} from 'vue'
+import * as echarts from 'echarts'
+const props=defineProps<{allResults:any[],criterion:string}>();const host=ref<HTMLDivElement>();let chart:echarts.ECharts|undefined;let observer:ResizeObserver|undefined
+function draw(){if(!chart)return;const groups:Record<string,any[]>={};for(const r of props.allResults){(groups[r.label]??=[]).push(r)}const colors=['#267b83','#6997ab','#ae824d','#596a9a','#7a9890','#b69481','#8d8198','#708089'];const series:any[]=[]
+Object.entries(groups).forEach(([label,rows],i)=>{for(let panel=0;panel<2;panel++){series.push({name:label,type:'scatter',xAxisIndex:panel,yAxisIndex:panel,symbolSize:8,itemStyle:{color:colors[i%colors.length]},data:rows.map(r=>[r.duration_h,panel?r.rmse_3d_m:r[props.criterion+'_m2'],r.size,r.angle_deg])})}})
+setLocalizedOption(chart,{animation:false,legend:{type:'scroll',bottom:0,textStyle:{fontSize:11}},tooltip:{trigger:'item',formatter:(p:any)=>`${p.seriesName}<br/>Duration ${p.value[0].toFixed(2)} h<br/>${p.seriesIndex%2?'3D error':'Design risk'} ${p.value[1].toPrecision(4)} ${p.seriesIndex%2?'m':'m²'}<br/>Radius ${p.value[2].toFixed(0)} m · Orientation ${p.value[3]}°`},grid:[{left:75,right:20,top:45,height:160},{left:75,right:20,top:280,height:160}],xAxis:[0,1].map(gridIndex=>({gridIndex,type:'value',name:'Survey duration (h)',nameLocation:'middle',nameGap:26,splitLine:{lineStyle:{color:'#edf1f3'}}})),yAxis:[{gridIndex:0,type:'value',name:`${props.criterion.toUpperCase()} (m²)`,splitLine:{lineStyle:{color:'#edf1f3'}}},{gridIndex:1,type:'value',name:'3D error (m)',splitLine:{lineStyle:{color:'#edf1f3'}}}],series},{notMerge:true})}
+onMounted(()=>{if(host.value){chart=echarts.init(host.value);observer=new ResizeObserver(()=>{chart?.resize();draw()});observer.observe(host.value);draw()}});watch(()=>[props.allResults,props.criterion],draw,{deep:true});onBeforeUnmount(()=>{observer?.disconnect();chart?.dispose()})
+watch(locale,()=>draw())
+</script>
+<style scoped>h3{font-size:14px;color:#315c67}p{font-size:12px;color:#788a91;margin:8px 0}.comparison-chart{width:100%;height:520px}</style>
