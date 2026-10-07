@@ -21,7 +21,7 @@
       <el-checkbox value="trajectory">{{ t('Track coordinates') }}</el-checkbox>
       <el-checkbox value="observations">{{ t('Observation data') }}</el-checkbox>
       <el-checkbox value="residuals">{{ t('Residuals') }}</el-checkbox>
-      <el-checkbox v-if="kind==='field'" value="raw">{{ t('Original uploaded files') }}</el-checkbox>
+      <el-checkbox v-if="kind==='field' || hasRaw" value="raw">{{ t('Original uploaded files') }}</el-checkbox>
     </el-checkbox-group>
     <p class="export-note">{{ t('Summary CSV, settings and JSON are always included. The ZIP contains a folder for each selected result.') }} <span v-if="kind==='field' && parts.includes('raw')">{{ t('Original files remain complete, including rows for unselected beacons.') }}</span></p>
     <el-button type="primary" :loading="downloading" :disabled="!taskId || (scope==='custom'&&!selectedIds.length)" @click="download">{{ t('Download ZIP') }}</el-button>
@@ -32,7 +32,7 @@ import { computed, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { t } from '../i18n'
 import { apiClient } from '../api'
-const props=defineProps<{taskId:string,kind:'simulation'|'field',rows:any[],budgetH?:number,criterion?:string}>()
+const props=defineProps<{taskId:string,kind:'simulation'|'field',rows:any[],budgetH?:number,criterion?:string,hasRaw?:boolean}>()
 const scope=ref('all'),parts=ref(['trajectory','observations','residuals']),query=ref(''),selectedIds=ref<string[]>([]),downloading=ref(false)
 const criterion=computed(()=>props.criterion??'c3')
 const rowId=(row:any)=>String(props.kind==='simulation'?row.candidate_id:row.beacon_id)

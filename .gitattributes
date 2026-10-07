@@ -1,3 +1,4 @@
 # Preserve the exact bytes verified by the bundled manifests on every platform.
 vendor/seaarray_core/** -text
 examples/large_circle_cross/** -text
+examples/south_china_sea_profiles/** -text

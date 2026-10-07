@@ -1,0 +1,36 @@
+{
+  "format_version": 1,
+  "kind": "background-aligned daily historical profiles",
+  "acknowledgement": "Generated using E.U. Copernicus Marine Service Information; https://doi.org/10.48670/moi-00021",
+  "product": "GLOBAL_MULTIYEAR_PHY_001_030",
+  "dataset": "cmems_mod_glo_phy_my_0.083deg_P1D-m",
+  "version": "202311",
+  "location": {
+    "latitude": 18.75,
+    "longitude": 116.500015
+  },
+  "dates": [
+    "2020-01-01",
+    "2020-12-31"
+  ],
+  "profiles": 366,
+  "background": "Mean of 187 profiles: two measured CTD casts plus 185 background-aligned 2021 profiles (37 days, five longitudes).",
+  "conversion": "TEOS-10: potential temperature thetao -> CT_from_pt; practical salinity -> SA_from_SP; sound_speed(SA,CT,p).",
+  "depth": "376 knots at 10 m spacing, 0–3750 m. Background below measured 3242 m extended at 0.016 (m/s)/m.",
+  "history_formula": "background(z) + taper(z) * [c_GLORYS_2020(date,z) - mean_37days(c_GLORYS_2021(center,z))]",
+  "taper": "1 through 3000 m; cosine to 0 at 3200 m; 0 below. No observed historical anomalies are claimed below this support.",
+  "caveat": "Derived, bias-aligned daily reanalysis profiles, not raw measured historical sound speed. One profile is static throughout each simulated survey.",
+  "split": {
+    "training_end": "2020-06-30",
+    "validation_start": "2020-07-15",
+    "training": 182,
+    "gap": 14,
+    "validation": 170
+  },
+  "evidence": "Retrospective calendar holdout: the full 2020 archive had already been explored. Validation values do not fit the new risk model or select routes.",
+  "source_netcdf_sha256": "c40933d9ef50c1e8db4d61047be3a42988e1587c8ed14d6839ce443b37b04f73",
+  "files": {
+    "background.csv": "e1f456210d20bf9c9a25d79a0f9f203a0b59c17c15ff3d75534f641ac7bc2886",
+    "history.csv": "0bc5ed282040d9047e8709ee7667d14d46f4e85fb8a5b769e2f324d4b2363823"
+  }
+}

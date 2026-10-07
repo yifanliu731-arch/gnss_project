@@ -179,6 +179,33 @@ def simulation_preview(body: dict):
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
+@app.get('/api/simulation/profile-example')
+def profile_example():
+    from profile_data import example_payload
+    return example_payload()
+
+
+@app.get('/api/simulation/profile-example/download')
+def profile_example_download():
+    import zipfile
+    from profile_data import EXAMPLE
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, 'w', zipfile.ZIP_DEFLATED) as archive:
+        for name in ('background.csv','history.csv','provenance.json','README.md'):
+            archive.writestr(name, (EXAMPLE/name).read_bytes())
+    return Response(output.getvalue(), media_type='application/zip',
+                    headers={'Content-Disposition':'attachment; filename="south-china-sea-profiles.zip"'})
+
+
+@app.post('/api/simulation/profiles/check')
+def check_profiles(body: dict):
+    from profile_data import load_profiles
+    try:
+        return load_profiles(body, fit=False)['metadata']
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(status_code=422,detail=str(exc)) from exc
+
+
 # =====================================================================
 # POST  /api/calculate
 # =====================================================================
@@ -216,6 +243,11 @@ async def api_calculate(request: Request, background_tasks: BackgroundTasks):
             from joint_simulation import configuration
             try:
                 configuration(body)
+                if body.get('sound_field_mode', 'munk') not in ('munk','profiles'):
+                    raise ValueError('Unknown sound-field mode.')
+                if body.get('sound_field_mode') == 'profiles':
+                    from profile_data import load_profiles
+                    load_profiles(body.get('sound_field'), fit=False)
             except (ValueError, TypeError) as exc:
                 TASK_STORE.pop(task_id, None)
                 raise HTTPException(status_code=422, detail=str(exc)) from exc

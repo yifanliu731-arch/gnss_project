@@ -74,6 +74,15 @@ def make_archive(saved, request, json_safe):
     out = io.BytesIO()
     with zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED) as z:
         z.writestr('summary.csv', csv_text(json_safe(summary)))
+        if kind == 'simulation' and saved['result'].get('field_validation'):
+            validation = saved['result']['field_validation']
+            selected_ids = {r[id_key] for r in selected}
+            z.writestr('validation_trials.csv', csv_text(json_safe([r for r in validation['trials'] if r['candidate_id'] in selected_ids])))
+            z.writestr('validation_comparisons.json', json.dumps(json_safe(validation),ensure_ascii=False,indent=2,allow_nan=False))
+            if 'raw' in parts:
+                settings = saved['result']['config']['sound_field']
+                z.writestr('original_inputs/background.csv', settings['background_csv'])
+                z.writestr('original_inputs/history.csv', settings['history_csv'])
         for index, row in enumerate(selected, 1):
             item = dict(summary[index-1])
             folder = f'results/{index:04d}'

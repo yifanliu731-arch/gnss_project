@@ -73,8 +73,8 @@ def configuration(body):
              seed=int(number(body, 'rng_seed', 20261002, 0, 2**32-1)),
              gdop=number(body, 'gdop_threshold', 2.5, .01, 100),
              criterion=body.get('criterion', 'c3'))
-    if c['criterion'] not in ('c3', 'c1'):
-        raise ValueError('The criterion must be c1 or c3.')
+    if c['criterion'] not in ('c3', 'c2', 'c1'):
+        raise ValueError('The criterion must be c1, c2 or c3.')
     if body.get('use_ray_tracing', True) is not True:
         raise ValueError('Joint simulation requires ray tracing.')
     if 'time_budget_min_h' in body or 'time_budget_max_h' in body:
@@ -201,7 +201,7 @@ def generate_observations(tour, c, tracer):
                 rejected_range=rejected_range, rejected_ray=ray_fail, rejected_dropout=rejected_drop,
                 skipped_transfer=skipped_transfer, slot_indices=ix)
 
-def design_metrics(data,c,tracer):
+def design_metrics(data,c,tracer, *, return_gain=False):
     b=c['beacons'];n=len(b);p=4*n+2
     sw=max(np.hypot(c['sw'],c['gnss']/1500.),1e-7)
     scales=np.r_[np.full(3*n,100.),1.,.001,.001,np.full(n-1,.001)]
@@ -225,7 +225,8 @@ def design_metrics(data,c,tracer):
         rows = j0[data['ids'] == i, 3*i:3*i+3]*1500
         sv = np.linalg.svd(rows, compute_uv=False)
         gdops.append(float(np.sqrt(np.sum(1/sv**2))) if len(sv)==3 and sv[-1]>sv[0]*1e-10 else float('inf'))
-    return dict(c1_m2=c1,c3_m2=c1+worst,worst_bias_m2=worst,gdop=max(gdops),condition_number=float(singular[0]/singular[-1]))
+    metrics = dict(c1_m2=c1,c2_m2=c1+float(np.trace(bias_cov)/(3*n)),c3_m2=c1+worst,worst_bias_m2=worst,gdop=max(gdops),condition_number=float(singular[0]/singular[-1]))
+    return (metrics, gain) if return_gain else metrics
 
 
 def joint_fit(data, c, tracer, *, simulation_truth=True):
@@ -315,7 +316,20 @@ def initial_specs(c):
         for r,source in scale_grid(m,depth,c['speed'],c['budgets_h'],c['ratios']) for a in c['angles']]
 
 
+def risk_refinements(rows, budgets, gdop):
+    """Include C2 neighbourhoods through the same shared refinement primitive."""
+    average_rows = [dict(r,c3_m2=r.get('c2_m2',r.get('c3_m2',float('inf')))) for r in rows]
+    proposals = refinements(rows,budgets,gdop)+refinements(average_rows,budgets,gdop)
+    # Stable common pool for all three choices; no dependence on test outcomes.
+    return list({tuple(p[:3]):p for p in proposals}.values())
+
+
 def run_survey(body, progress=None, export_sink=None):
+    if body.get('sound_field_mode', 'munk') == 'profiles':
+        from profile_simulation import run_profile_survey
+        return run_profile_survey(body, progress, export_sink)
+    if body.get('sound_field_mode', 'munk') != 'munk':
+        raise ValueError('Unknown sound-field mode.')
     c = configuration(body)
     profile = generate_munk_ssp_table(H=float(np.max(-c['beacons'][:,2]))+500, dz=20.)
     if body.get('ssp_profile'):
@@ -348,7 +362,7 @@ def run_survey(body, progress=None, export_sink=None):
             except (ValueError,np.linalg.LinAlgError) as error:row['reason']=str(error)
             rows.append(row)
             if progress:progress(index+1,len(pending),dict(row,phase='search',stage=stage,rounds=c['refinement_rounds']+1))
-        specs=refinements(rows,c['budgets_h'],c['gdop']) if stage<c['refinement_rounds'] else []
+        specs=risk_refinements(rows,c['budgets_h'],c['gdop']) if stage<c['refinement_rounds'] else []
     epochs=[]
     for row in rows:
         if row['design_valid']:
@@ -363,7 +377,7 @@ def run_survey(body, progress=None, export_sink=None):
             try:
                 d=generate_observations(tour,c,tracer)
                 metrics=joint_fit(d,c,tracer)
-                for key in ('c1_m2','c3_m2','gdop'):
+                for key in ('c1_m2','c2_m2','c3_m2','gdop'):
                     if not np.isclose(metrics[key],row[key],rtol=1e-10,atol=1e-10):raise ValueError('Design changed after the search pool was frozen.')
                 row.update(metrics)
                 row.update(valid=True, observations_count=len(d['times']), attempted_slots=d['attempted'],
@@ -420,10 +434,10 @@ def run_survey(body, progress=None, export_sink=None):
                 message='Complete' if eligible else 'No candidate meets coverage, identifiability, duration and GDOP requirements. Review the candidate reasons.',
                 model_notes=['User minimum and maximum budgets define ten inclusive logarithmically spaced caps. Each complete candidate is simulated once; all caps select from these same results without truncating routes or rerandomizing observations.',
                   'Five families use one closed traversal. Circle plus cross runs the circle, first diameter, straight transfer and perpendicular diameter, ending without a forced return. Transfer travel counts in duration; transfer sampling is off by default. No extra laps are added. Transit from an unspecified port is excluded.',
-                  'User scale bounds are strict. Search adds in-range budget-boundary scales and log-midpoints near both C1 and C3 winners. It is a finite refined search, not a global continuous optimum. Circle angle controls starting phase; other family angles control orientation.',
+                  'User scale bounds are strict. Search adds in-range budget-boundary scales and log-midpoints near C1, C2 and C3 winners. It is a finite refined search, not a global continuous optimum. Circle angle controls starting phase; other family angles control orientation.',
                   'Serial polling addresses one beacon per slot. Slots use the larger of the requested interval and conservative two-way acoustic occupancy.',
                   'Layered Snell rays with perturbations integrated along the reference ray: exp(-depth/1000 m), shared OU amplitude and fixed horizontal gradients.',
                   'Jointly estimates all beacon coordinates, common sound-speed offset, delay, linear drift and relative beacon delays. No coordinate truth priors.',
-                  'C1/C3 are declared local risks with C3 radius 1. Position errors are from one simulation realisation, not repeated-trial MSE.',
+                  'C1 is nominal variance; C2 adds the trace of the environmental risk matrix; C3 adds its largest eigenvalue at radius 1. Their probability and bounded-set interpretations differ. Position errors are one simulation realisation, not repeated-trial MSE.',
                   'Nuisance prior SDs: sound offset 2 m/s, common/relative delays 5 ms, drift 1 ms/hour. Effective timing noise has a 0.1 microsecond numerical floor. C1 includes prior uncertainty.',
                   'Range is an assumed slant-range cutoff, without a device link budget, separate transmit/receive positions or full 3D acoustics. Scoring approximates GNSS errors as independent time noise.'])
