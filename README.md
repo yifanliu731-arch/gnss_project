@@ -37,6 +37,7 @@ A Vue / FastAPI application for configurable multi-beacon GNSS-A survey design. 
 - Rotation uses **180° divisions**: 1 → 0°; 2 → 0°/90°; 3 → 0°/60°/120°; 4 → 0°/45°/90°/135°.
 - C1 / C3 comparisons, candidate refinement, plots and CSV/JSON exports.
 - Measured GNSS, travel-time and SSP upload with automatic beacon-ID discovery. Joint array calibration is the default; single-beacon fitting uses the same curved-ray/MAP model independently for each selected beacon. Legacy TOA/ABIC/ESKF solvers remain available.
+- Field tracks switch between smoothed curves and unconnected points. Curve smoothing is display-only within each segment; faint, thin, widely spaced dashed links mark navigation gaps. Joint/single-model residual plots identify beacons and UTC, report RMS, and use observed minus fitted travel time in milliseconds.
 
 See [numerical workflow](docs/model.md) for assumptions, parameter definitions and limits.
 

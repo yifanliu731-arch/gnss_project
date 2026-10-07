@@ -21,6 +21,22 @@ def fixture(n=3, layers=40):
     return groups,profile,{bid:b for bid,b in zip([5,2,6,11][:n],truth)}
 
 class JointFieldTests(unittest.TestCase):
+    def test_residual_uses_complete_prediction_and_seconds_to_ms(self):
+        groups,profile,truth=fixture()
+        tracer=ResearchRayTracer(profile)
+        all_times=np.concatenate([g['times'] for g in groups.values()]);t0=np.median(all_times)
+        for bid,g in groups.items():
+            travel,_=tracer.varying_offset(g['ship'],truth[bid],.2)
+            g['delays']=travel+.001+.00002*(g['times']-t0)/3600+({5:0,2:.0001,6:-.0001}[bid])
+        records,rows,summary=solve_field_joint(groups,profile,gnss_noise_m=0)
+        for row in rows:
+            g=groups[row['beacon_id']];index=summary['beacon_ids'].index(row['beacon_id'])
+            travel,_=tracer.varying_offset(g['ship'],np.array([row['x'],row['y'],row['z']]),summary['sound_speed_offset_mps'])
+            fitted=travel+summary['common_delay_s']+summary['relative_delays_s'][index]+summary['delay_rate_s_per_hour']*(g['times']-summary['time_reference_s'])/3600
+            expected=1000*(g['delays']-fitted)
+            np.testing.assert_allclose(row['residuals_ms'],expected,atol=1e-9,rtol=0)
+            self.assertAlmostEqual(row['rmse_time_ms'],np.sqrt(np.mean(expected**2)),places=9)
+
     def test_general_n_free_coordinates_and_original_observation_order(self):
         for n in (1,3,4):
             with self.subTest(n=n):
@@ -97,7 +113,7 @@ class JointFieldTests(unittest.TestCase):
         lat=18.7+.01*np.cos(angle);lon=116.5+.015*np.sin(angle);alt=np.full(count,20.)
         ship=apply_lever_arm_batch(enu_matrix(lat,lon,alt,18.7,116.5),[1.585,6.716,-29.05],np.zeros(count),np.zeros(count),np.zeros(count))
         start=datetime(2021,5,1,tzinfo=timezone.utc)
-        stamps=[(start+timedelta(seconds=20*i)).isoformat() for i in range(count)]
+        stamps=[(start+timedelta(seconds=20*i+(3600 if i>=24 else 0))).isoformat() for i in range(count)]
         def csv_bytes(header,rows):
             text=io.StringIO();writer=csv.writer(text);writer.writerow(header);writer.writerows(rows);return text.getvalue().encode()
         gnss=csv_bytes(['Time_UTC','Latitude_deg','Longitude_deg','Altitude_m','Pitch_deg','Roll_deg','Heading_deg'],[[stamps[i],lat[i],lon[i],20,0,0,0] for i in range(count)])
@@ -116,6 +132,10 @@ class JointFieldTests(unittest.TestCase):
                 result=result['result'];self.assertEqual(result['solver_type'],mode)
                 self.assertEqual([r['beacon_id'] for r in result['beacon_results']],[2,5,6])
                 self.assertEqual(sum(r['n_clean'] for r in result['beacon_results']),144)
+                self.assertEqual(sum(p['gap_before'] for p in result['trajectory']),1)
+                self.assertEqual(sum(p['gap_before'] for p in result['trajectory_latlon']),1)
+                self.assertEqual(len(result['residual_observations']),144)
+                self.assertEqual([r['beacon_id'] for r in result['residual_observations'][:3]],[2,5,6])
                 self.assertIsNone(result['depth_prior_m'])
                 if mode=='joint_map':self.assertEqual(result['joint_solution']['joint_parameter_count'],14)
                 else:

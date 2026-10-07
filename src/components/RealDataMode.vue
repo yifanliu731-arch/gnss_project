@@ -30,14 +30,23 @@
               <span v-if="refLat !== null && refLon !== null" style="margin-left:auto;font-size:12px;color:#909399">{{ t("Reference origin:") }} {{ t(refLat.toFixed(1)) }}°, {{ t(refLon.toFixed(1)) }}°</span>
             </div>
           </template>
-          <TrajectoryChart v-if="hasChartData" :trajectory-data="trajectoryData" />
+          <el-radio-group v-model="trackDisplayMode" size="small" :aria-label="t('Track display')" class="track-display-controls">
+            <el-radio-button value="smooth">{{ t('Smooth curve') }}</el-radio-button>
+            <el-radio-button value="scatter">{{ t('Points only') }}</el-radio-button>
+          </el-radio-group>
+          <TrajectoryChart v-if="hasChartData" :trajectory-data="trajectoryData" :display-mode="trackDisplayMode" />
+          <p v-if="hasChartData" class="field-scope">{{ t(trackDisplayMode==='smooth'?'Smoothing is for display only. Pale dashed links indicate gaps, not observed travel.':'Points are shown without connecting lines. Display mode does not change the fit.') }}</p>
           <div v-else class="chart-placeholder"><el-icon :size="40" color="#c0c4cc"><TrendCharts /></el-icon><p>{{ t("Upload a GNSS position file to view the track") }}</p></div>
         </el-card>
 
         <!-- Survey track图表 (经Latitude) -->
         <el-card class="panel-card" shadow="hover">
           <template #header><div class="panel-header"><el-icon><DataAnalysis /></el-icon><span>{{ t("Survey track (geographic)") }}</span></div></template>
-          <TrajectoryLatLonChart v-if="latlonTrajectoryData.length > 0" :trajectory-data="latlonTrajectoryData" :ref-lat="refLat ?? 0" :ref-lon="refLon ?? 0" />
+          <el-radio-group v-model="trackDisplayMode" size="small" :aria-label="t('Geographic track display')" class="track-display-controls">
+            <el-radio-button value="smooth">{{ t('Smooth curve') }}</el-radio-button>
+            <el-radio-button value="scatter">{{ t('Points only') }}</el-radio-button>
+          </el-radio-group>
+          <TrajectoryLatLonChart v-if="latlonTrajectoryData.length > 0" :trajectory-data="latlonTrajectoryData" :ref-lat="refLat ?? 0" :ref-lon="refLon ?? 0" :display-mode="trackDisplayMode" />
           <div v-else class="chart-placeholder"><el-icon :size="40" color="#c0c4cc"><TrendCharts /></el-icon><p>{{ t("Upload a GNSS position file to view the track") }}</p></div>
         </el-card>
 
@@ -45,6 +54,7 @@
         <el-card class="panel-card" shadow="hover">
           <template #header><div class="panel-header"><el-icon><DataAnalysis /></el-icon><span>{{ t("Travel-time residuals") }}</span></div></template>
           <RealResidualChart v-if="residualData.length > 0" :data="residualData" :outlier-mask="outlierMask" :title="t(&quot;Travel-time residuals&quot;)" :y-axis-name="t(&quot;Residual (ms)&quot;)" unit="ms" />
+          <p v-if="residualData.length && ['joint_map','single_map'].includes(result.solverType ?? '')" class="field-scope">{{ t('Residual = observed time − fitted prediction, in ms. The prediction includes refracted travel time, fitted sound-speed offset, effective delays and drift. Residuals are not coordinate errors; no residual clipping is applied in this mode.') }}</p>
           <div v-else class="chart-placeholder"><el-icon :size="40" color="#c0c4cc"><TrendCharts /></el-icon><p>{{ t("Upload files and select \"Process field data\" to view residuals") }}</p></div>
         </el-card>
 
@@ -52,6 +62,7 @@
         <el-card class="panel-card" shadow="hover">
           <template #header><div class="panel-header"><el-icon><DataAnalysis /></el-icon><span>{{ t("Equivalent range residuals") }}</span></div></template>
           <RealResidualChart v-if="distanceResidualData.length > 0" :data="distanceResidualData" :outlier-mask="outlierMask" :title="t(&quot;Equivalent range residuals&quot;)" :y-axis-name="t(&quot;Residual (m)&quot;)" unit="m" />
+          <p v-if="distanceResidualData.length" class="field-scope">{{ t('Equivalent range residual = travel-time residual (s) × equivalent sound speed. This is not a position error.') }}</p>
           <div v-else class="chart-placeholder"><el-icon :size="40" color="#c0c4cc"><TrendCharts /></el-icon><p>{{ t("Equivalent range residuals appear after TOA adjustment") }}</p></div>
         </el-card>
 
@@ -201,6 +212,7 @@ import { ElMessage } from 'element-plus'
 import type { UploadFile, UploadFiles, UploadInstance } from 'element-plus'
 import { apiClient } from '../api'
 import TrajectoryChart from './TrajectoryChart.vue'
+import type { TrackPoint } from '../trackSegments'
 import TrajectoryLatLonChart from './TrajectoryLatLonChart.vue'
 import RealResidualChart from './RealResidualChart.vue'
 import SSPProfileChart from './SSPProfileChart.vue'
@@ -239,12 +251,14 @@ const result = reactive({
 })
 function solverLabel(t: string|null): string { return t==='joint_map'?'Joint array calibration':t==='single_map'?'Single-beacon fitting':t==='7param'?'TOA: fixed k':t==='9param'?'TOA + gradients':t==='abic_grad'?'TOA + gradients ABIC':t==='eskf_21param'?'21-state calibration':t==='simple_ls'?'Basic LS':t??'?' }
 
-const trajectoryData = ref<Array<{x:number;y:number}>>([])
-const residualData = ref<Array<{epoch:number;value:number}>>([])
-const distanceResidualData = ref<Array<{epoch:number;value:number}>>([])
+const trackDisplayMode = ref<'smooth'|'scatter'>('smooth')
+const trajectoryData = ref<TrackPoint[]>([])
+type ResidualPoint = {epoch:number;value:number;beacon_id?:number;source_time?:string}
+const residualData = ref<ResidualPoint[]>([])
+const distanceResidualData = ref<ResidualPoint[]>([])
 const outlierMask = ref<boolean[]>([])
 const refLat = ref<number|null>(null); const refLon = ref<number|null>(null)
-const latlonTrajectoryData = ref<Array<{lat:number;lon:number}>>([])
+const latlonTrajectoryData = ref<Array<{lat:number;lon:number;gap_before?:boolean}>>([])
 const isAllFilesReady = computed(() => gnssFileList.value.length>0 && delayFileList.value.length>0 && svpFileList.value.length>0)
 const hasChartData = computed(() => trajectoryData.value.length>0)
 
@@ -354,8 +368,8 @@ async function handleStartProcessing() {
       Object.assign(result, { x: data.result_x, y: data.result_y, z: data.result_z, rmse: data.rmse_time_ms ?? data.rmse ?? null, rmseDistance: data.rmse_distance_m ?? null, outlierRate: data.outlier_rate, systemClockBiasMs: data.system_clock_bias_ms ?? null, clockDriftSs: data.clock_drift_ss ?? null, clockDrift2: data.clock_drift2_ss2 ?? null, zenithK: data.zenith_k_ms_km2 ?? null, cEq: data.c_eq_mps ?? null, sigmaE: data.sigma_e_m ?? null, sigmaN: data.sigma_n_m ?? null, sigmaU: data.sigma_u_m ?? null, svBiasMps: data.sound_speed_bias_mps ?? null, sysDelayMs: data.system_delay_ms ?? null, timeSyncDelayMs: data.time_sync_delay_ms ?? null, leverArmZ: data.lever_arm_z_down_m ?? null, solverType: data.solver_type ?? 'simple_ls' })
     }
     if (data.trajectory) trajectoryData.value = data.trajectory
-    if (data.residuals_ms) residualData.value = data.residuals_ms.map((v: number, i: number) => ({ epoch: i + 1, value: v }))
-    if (data.residuals_m) distanceResidualData.value = data.residuals_m.map((v: number, i: number) => ({ epoch: i + 1, value: v }))
+    if (data.residuals_ms) residualData.value = data.residuals_ms.map((v: number, i: number) => ({ ...data.residual_observations?.[i], epoch: i + 1, value: v }))
+    if (data.residuals_m) distanceResidualData.value = data.residuals_m.map((v: number, i: number) => ({ ...data.residual_observations?.[i], epoch: i + 1, value: v }))
     if (data.outlier_mask) outlierMask.value = data.outlier_mask
     refLat.value = data.ref_lat ?? null; refLon.value = data.ref_lon ?? null
     if (data.trajectory_latlon) latlonTrajectoryData.value = data.trajectory_latlon

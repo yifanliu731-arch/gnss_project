@@ -45,6 +45,7 @@ from geo import (
     interp_heading,
 )
 from scipy.interpolate import CubicSpline
+from track_display import mark_track_gaps, copy_gap_metadata, uploaded_times
 from datetime import datetime
 import re
 
@@ -796,8 +797,11 @@ def _run_realdatabackground(
         all_residuals_ms: list = []
         all_residuals_m: list = []
         all_outlier_mask: list = []
+        residual_observations: list = []
         shared_trajectory = None
         shared_trajectory_latlon = None
+        shared_trajectory_times = None
+        shared_latlon_times = None
         depth_prior = None
         joint_groups = {}
         joint_solution = None
@@ -847,6 +851,8 @@ def _run_realdatabackground(
 
                 # Shared trajectory: return interpolated ENU at delay times (with lever arm for display)
                 if shared_trajectory is None:
+                    shared_trajectory_times = t_query
+                    shared_latlon_times = t_query
                     shared_trajectory = [{"x": float(obs_ship_b[i, 0]), "y": float(obs_ship_b[i, 1]), "z": float(obs_ship_b[i, 2])} for i in range(n)]
                     # latlon: interpolate lat/lon from GNSS data at query times (simplified: nearest or use original GNSS lat/lon)
                     shared_trajectory_latlon = []
@@ -873,6 +879,8 @@ def _run_realdatabackground(
                 obs_delays_b = np.array([float(b_delays[i % n_dly].get(dly_col, 0)) for i in range(n)])
 
                 if shared_trajectory is None:
+                    shared_trajectory_times = t_query
+                    shared_latlon_times = gnss_times_s[:n]
                     shared_trajectory = [{"x": float(obs_ship_b[i, 0]), "y": float(obs_ship_b[i, 1]), "z": float(obs_ship_b[i, 2])} for i in range(n)]
                     shared_trajectory_latlon = [
                         {"lat": float(gnss_data[i % n_gnss].get(lat_col, 0)), "lon": float(gnss_data[i % n_gnss].get(lon_col, 0))}
@@ -1088,10 +1096,26 @@ def _run_realdatabackground(
                 observations.extend(zip(row['observations'],row['residuals_ms'],row['residuals_m']))
             observations.sort(key=lambda item:item[0]['time_s'])
             shared_trajectory=[dict(x=o['e_m'],y=o['n_m'],z=o['u_m']) for o,_,_ in observations]
+            shared_trajectory_times=np.array([o['time_s'] for o,_,_ in observations])
             all_residuals_ms=[r for _,r,_ in observations]
             all_residuals_m=[r for _,_,r in observations]
             all_outlier_mask=[False]*len(observations)
+            residual_observations=[dict(beacon_id=o['beacon_id'],time_s=o['time_s'],source_time=o['source_time']) for o,_,_ in observations]
             shared_trajectory_latlon=[dict(lat=float(g[lat_col]),lon=float(g[lon_col])) for g in gnss_data]
+            shared_latlon_times=gnss_times_s
+
+        # Display segmentation uses original navigation gaps; no fit input changes.
+        nav_e,nav_n,_=latlonalt_to_enu(lats_all,lons_all,alts_all,ref_lat,ref_lon)
+        nav_marked=mark_track_gaps([dict(x=float(e),y=float(n)) for e,n in zip(nav_e,nav_n)],
+                                   gnss_times_s if _use_time_align else None)
+        break_times=[p['time_s'] for p in nav_marked if p['gap_before'] and 'time_s' in p]
+        shared_trajectory=mark_track_gaps(shared_trajectory or [], shared_trajectory_times if _use_time_align else None, break_times)
+        if shared_trajectory_latlon:
+            geo_e,geo_n,_=latlonalt_to_enu([p['lat'] for p in shared_trajectory_latlon],
+                [p['lon'] for p in shared_trajectory_latlon],np.zeros(len(shared_trajectory_latlon)),ref_lat,ref_lon)
+            geo_marked=mark_track_gaps([dict(x=float(e),y=float(n)) for e,n in zip(geo_e,geo_n)],
+                shared_latlon_times if _use_time_align else None, break_times)
+            shared_trajectory_latlon=copy_gap_metadata(shared_trajectory_latlon,geo_marked)
 
         # --- Final response ---
         _update(98, "Preparing results")
@@ -1107,6 +1131,7 @@ def _run_realdatabackground(
             "residuals_ms": all_residuals_ms,
             "residuals_m": all_residuals_m,
             "outlier_mask": all_outlier_mask,
+            "residual_observations": residual_observations,
             "beacon_results": beacon_results,
             # Legacy compat: first beacon
             "result_x": next((b.get("x") for b in beacon_results if b.get("status")=="success"),None),
@@ -1305,6 +1330,8 @@ async def api_gnss_parse(request: Request):
         trajectory_latlon = [
             {"lat": round(float(lats[i]), 8), "lon": round(float(lons[i]), 8)} for i in range(n)
         ]
+        trajectory = mark_track_gaps(trajectory, uploaded_times(rows))
+        trajectory_latlon = copy_gap_metadata(trajectory_latlon, trajectory)
 
         return JSONResponse(content={
             "status": "ok",

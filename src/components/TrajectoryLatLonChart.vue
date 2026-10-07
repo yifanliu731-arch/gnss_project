@@ -5,7 +5,7 @@
 -->
 <template>
   <div class="latlon-chart">
-    <div ref="chartRef" class="chart-box-latlon"></div>
+    <div ref="chartRef" class="chart-box-latlon" role="img" :aria-label="t('Survey track in longitude and latitude')"></div>
   </div>
 </template>
 
@@ -13,20 +13,24 @@
 import { t, locale, setLocalizedOption } from "../i18n"
 import { onMounted, onUnmounted, ref, watch } from 'vue'
 import * as echarts from 'echarts'
+import { splitTrack, gapLineStyle } from '../trackSegments'
 
 interface LatLonPoint {
   lat: number
   lon: number
+  gap_before?: boolean
 }
 
 const props = withDefaults(defineProps<{
   trajectoryData?: LatLonPoint[]
   refLat?: number
   refLon?: number
+  displayMode?: 'smooth' | 'scatter'
 }>(), {
   trajectoryData: () => [],
   refLat: 0,
   refLon: 0,
+  displayMode: 'smooth',
 })
 
 const chartRef = ref<HTMLDivElement>()
@@ -47,7 +51,7 @@ onUnmounted(() => {
 })
 
 watch(
-  () => [props.trajectoryData, props.refLat, props.refLon],
+  () => [props.trajectoryData, props.refLat, props.refLon, props.displayMode],
   () => updateChart(),
   { deep: true }
 )
@@ -61,9 +65,11 @@ function updateChart() {
 
   // 空值/类型防护：数据未加载或格式错误时退化为空数组，避免 data.map 崩溃
   const source = Array.isArray(props.trajectoryData) ? props.trajectoryData : []
-  const trackData = source
+  const points = source
     .filter((p): p is LatLonPoint => p != null && typeof p.lat === 'number' && typeof p.lon === 'number')
-    .map(p => [p.lon, p.lat])
+  const trackData = points.map(p => [p.lon, p.lat])
+  const { track, gap } = splitTrack(points.map(p=>({...p,x:p.lon,y:p.lat})))
+  if (!trackData.length) { chart.clear(); return }
 
   // Compute true geometric centroid from data (not the rounded reference point)
   let lonMin = Infinity, lonMax = -Infinity
@@ -87,6 +93,8 @@ function updateChart() {
   const half = Math.max(halfLon, halfLat) * 1.15 + 0.0005
 
   setLocalizedOption(chart,{
+    animation: false,
+    legend: {bottom: 0, textStyle: {fontSize: 11, color: '#67808a'}},
     tooltip: {
       trigger: 'item',
       formatter: (params: any) => {
@@ -104,7 +112,7 @@ function updateChart() {
       left: 65,
       right: 25,
       top: 35,
-      bottom: 45,
+      bottom: 65,
       containLabel: true
     },
     xAxis: {
@@ -133,15 +141,16 @@ function updateChart() {
     },
     series: [
       {
-        name: 'Survey track',
-        type: 'line',
-        data: trackData,
-        smooth: true,
-        showSymbol: true,
+        name: props.displayMode==='scatter'?'Survey points':'Survey track',
+        type: props.displayMode==='scatter'?'scatter':'line',
+        data: props.displayMode==='scatter'?trackData:track,
+        smooth: .2,
+        connectNulls: false,
+        showSymbol: false,
         symbol: 'circle',
-        symbolSize: 5,
+        symbolSize: 2.5,
         lineStyle: { color: '#409eff', width: 1.5 },
-        itemStyle: { color: '#409eff' },
+        itemStyle: { color: '#409eff', opacity: .65 },
         markPoint: {
           symbol: 'pin',
           symbolSize: 36,
@@ -162,7 +171,8 @@ function updateChart() {
             distance: 8
           }
         }
-      }
+      },
+      ...(props.displayMode==='smooth' && gap.length ? [{name:'Gap between segments',type:'line',data:gap,smooth:false,connectNulls:false,showSymbol:false,lineStyle:gapLineStyle,silent:true}] : [])
     ]
   }, { notMerge: true })
 }

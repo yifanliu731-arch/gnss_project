@@ -330,5 +330,19 @@
   "The details below show the first successfully fitted beacon. All selected beacons are listed in the table and can be exported.": "下方详情显示首个成功求解的信标；所有所选信标的结果均列在表中，并可导出。",
   "Jointly fitting all selected beacons": "正在联合估计所有所选信标",
   "Preparing joint estimates and export data": "正在整理联合解与导出数据",
-  "Export download started.": "导出文件已生成并开始下载。"
+  "Export download started.": "导出文件已生成并开始下载。",
+  "Residual = observed time − fitted prediction, in ms. The prediction includes refracted travel time, fitted sound-speed offset, effective delays and drift. Residuals are not coordinate errors; no residual clipping is applied in this mode.": "残差＝观测走时－拟合预测，单位为毫秒。预测包含折射走时、所估声速偏移、有效时延和漂移。残差不是坐标误差；此模式不按残差自动剔除数据。",
+  "Equivalent range residual = travel-time residual (s) × equivalent sound speed. This is not a position error.": "等效距离残差＝走时残差（秒）×等效声速，不等于定位误差。",
+  "Retained observations": "保留观测数",
+  "Maximum absolute residual": "最大绝对残差",
+  "Observation index": "观测序号",
+  "Track display": "轨迹显示方式",
+  "Geographic track display": "经纬度轨迹显示方式",
+  "Smooth curve": "平滑曲线",
+  "Points only": "纯散点",
+  "Survey points": "观测点",
+  "Gap between segments": "航段间断",
+  "Survey track in longitude and latitude": "经纬度坐标下的实测轨迹",
+  "Smoothing is for display only. Pale dashed links indicate gaps, not observed travel.": "平滑仅用于显示。淡虚线表示航段间断，不代表已观测的航行轨迹。",
+  "Points are shown without connecting lines. Display mode does not change the fit.": "仅显示观测点，不连接线。显示方式不影响解算结果。"
 }

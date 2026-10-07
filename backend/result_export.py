@@ -69,7 +69,7 @@ def make_archive(saved, request, json_safe):
                     note='Exports saved data only; no simulation or fit is rerun. Field ranking is per-beacon residual RMS, not trajectory C3 or absolute coordinate accuracy.')
     manifest['run_metadata'] = {k:v for k,v in saved['result'].items() if k not in
         ('all_results','plans_by_id','plan_a','plan_b','plan_c','plan_trajectories','trajectory',
-         'trajectory_latlon','residuals_ms','residuals_m','outlier_mask','beacon_results')}
+         'trajectory_latlon','residuals_ms','residuals_m','outlier_mask','beacon_results','residual_observations')}
     content = dict(manifest=manifest, results=[])
     out = io.BytesIO()
     with zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED) as z:

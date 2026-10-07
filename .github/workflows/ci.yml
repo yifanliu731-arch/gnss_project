@@ -11,6 +11,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+      - run: node --experimental-strip-types scripts/test_track_segments.mjs
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
