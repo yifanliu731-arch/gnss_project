@@ -4,6 +4,7 @@ One-way equivalent observations, serial acoustic occupancy, a shared depth mode
 with OU amplitude and affine gradients. No coordinate truth enters the objective.
 """
 import hashlib
+import json
 from pathlib import Path
 import numpy as np
 from scipy.optimize import least_squares
@@ -324,6 +325,22 @@ def risk_refinements(rows, budgets, gdop):
     return list({tuple(p[:3]):p for p in proposals}.values())
 
 
+def choose_plans(candidates, score):
+    """Design-stage choices only; never filter by validation outcome."""
+    if not candidates:
+        return dict.fromkeys(('plan_a', 'plan_b', 'plan_c'))
+    candidates = sorted(candidates, key=lambda r: r['candidate_id'])
+    a = min(candidates, key=lambda r: (r[score], r['duration_h'], r['candidate_id']))
+    median = float(np.median([r[score] for r in candidates]))
+    b = min([r for r in candidates if r[score] <= median],
+            key=lambda r: (r['duration_h'], r['candidate_id']))
+    scores = np.array([r[score] for r in candidates])
+    durations = np.array([r['duration_h'] for r in candidates])
+    cost = (.5*(scores-scores.min())/max(float(np.ptp(scores)), 1e-15)
+            + .5*(durations-durations.min())/max(float(np.ptp(durations)), 1e-15))
+    return dict(zip(('plan_a', 'plan_b', 'plan_c'), (a, b, candidates[int(np.argmin(cost))])))
+
+
 def run_survey(body, progress=None, export_sink=None):
     if body.get('sound_field_mode', 'munk') == 'profiles':
         from profile_simulation import run_profile_survey
@@ -353,16 +370,34 @@ def run_survey(body, progress=None, export_sink=None):
             row=dict(candidate_id=f'{VERSION}:{mode}:{float(ratio):.15g}:{float(angle):.15g}',
                 type=mode,label=FAMILIES[mode],ratio=float(ratio),size=float(depth*ratio),size_m=float(depth*ratio),
                 angle_deg=float(angle),path_length_m=tour.length,length=tour.length,
-                duration_h=tour.length/c['speed']/3600,valid=False,design_valid=False,
+                duration_h=tour.length/c['speed']/3600,valid=False,design_valid=False,validation_status='not_evaluated',
                 search_source=source,search_round=stage,**tour.core.metadata())
             try:
                 if tour.length/c['speed']>c['budget']+1e-7:raise ValueError('The complete route exceeds the time budget.')
                 d=generate_observations(tour,c,tracer)
-                row.update(design_metrics(d,c,tracer));row['design_valid']=True
+                row.update(design_metrics(d,c,tracer));row.update(valid=True,design_valid=True,validation_status='pending')
             except (ValueError,np.linalg.LinAlgError) as error:row['reason']=str(error)
             rows.append(row)
             if progress:progress(index+1,len(pending),dict(row,phase='search',stage=stage,rounds=c['refinement_rounds']+1))
         specs=risk_refinements(rows,c['budgets_h'],c['gdop']) if stage<c['refinement_rounds'] else []
+    # Freeze every budget's recommendation before any validation fit or outcome.
+    score = c['criterion']+'_m2'
+    valid = [r for r in rows if r['design_valid'] and np.isfinite(r[score])]
+    eligible = [r for r in valid if r['gdop'] <= c['gdop']]
+    budget_results = []
+    selected_ids = set()
+    for budget_h in c['budgets_h']:
+        within = [r for r in valid if r['duration_h'] <= budget_h+1e-10]
+        feasible = [r for r in within if r['gdop'] <= c['gdop']]
+        item = dict(budget_h=float(budget_h), n_valid=len(within), n_eligible=len(feasible),
+                    message='Complete' if feasible else 'No complete eligible route within this time budget.')
+        for key, row in choose_plans(feasible, score).items():
+            item[key] = None if row is None else row['candidate_id']
+            if row is not None:
+                selected_ids.add(row['candidate_id'])
+        budget_results.append(item)
+    frozen_selection = [{k:r[k] for k in ('budget_h','plan_a','plan_b','plan_c')} for r in budget_results]
+    selection_sha256 = hashlib.sha256(json.dumps(frozen_selection, sort_keys=True).encode()).hexdigest()
     epochs=[]
     for row in rows:
         if row['design_valid']:
@@ -376,49 +411,30 @@ def run_survey(body, progress=None, export_sink=None):
         if row['design_valid']:
             try:
                 d=generate_observations(tour,c,tracer)
-                metrics=joint_fit(d,c,tracer)
-                for key in ('c1_m2','c2_m2','c3_m2','gdop'):
-                    if not np.isclose(metrics[key],row[key],rtol=1e-10,atol=1e-10):raise ValueError('Design changed after the search pool was frozen.')
-                row.update(metrics)
-                row.update(valid=True, observations_count=len(d['times']), attempted_slots=d['attempted'],
+                # Keep the attempted observations even if the estimator fails.
+                row.update(observations_count=len(d['times']), attempted_slots=d['attempted'],
                     slot_s=d['slot_s'], per_beacon_counts=d['per_beacon_counts'],
                     rejected_range=d['rejected_range'], rejected_ray=d['rejected_ray'],
-                    rejected_dropout=d['rejected_dropout'], skipped_transfer=d['skipped_transfer'], collect_transfer=c['collect_transfer'],rmse=row['rmse_horizontal_m'],
-                    rmse_position_m=row['rmse_horizontal_m'],solver_type='joint_map')
+                    rejected_dropout=d['rejected_dropout'], skipped_transfer=d['skipped_transfer'], collect_transfer=c['collect_transfer'],solver_type='joint_map')
                 row['_observations']=[dict(time_s=float(d['times'][k]),beacon_id=int(d['ids'][k])+1,
                     e_m=float(d['ship'][k,0]),n_m=float(d['ship'][k,1]),u_m=float(d['ship'][k,2]),
                     delay_s=float(d['delays'][k]),true_delay_s=float(d['travel'][k]),field_delay_s=float(d['field'][k])) for k in range(len(d['times']))]
-            except (ValueError,np.linalg.LinAlgError) as error:row['reason']=str(error)
+                metrics=joint_fit(d,c,tracer)
+                for key in ('c1_m2','c2_m2','c3_m2','gdop'):
+                    if not np.isclose(metrics[key],row[key],rtol=1e-10,atol=1e-10):raise ValueError('Design changed after the search pool was frozen.')
+                row.update({k:v for k,v in metrics.items() if k not in ('c1_m2','c2_m2','c3_m2','gdop')})
+                row.update(validation_status='success',rmse=row['rmse_horizontal_m'],rmse_position_m=row['rmse_horizontal_m'])
+            except (ValueError,np.linalg.LinAlgError) as error:
+                row.update(validation_status='failed',validation_reason=str(error))
         if progress:progress(index+1,len(rows),dict(row,phase='solve'))
     if export_sink is not None:
         export_sink(rows)
-    score = c['criterion']+'_m2'
-    valid = [r for r in rows if r['valid'] and np.isfinite(r[score])]
-    eligible = [r for r in valid if r['gdop'] <= c['gdop']]
-    def choose(candidates):
-        a = b = balanced = None
-        if candidates:
-            a = min(candidates, key=lambda r: (r[score], r['duration_h']))
-            median = float(np.median([r[score] for r in candidates]))
-            b = min([r for r in candidates if r[score] <= median], key=lambda r: r['duration_h'])
-            scores = np.array([r[score] for r in candidates]); durations = np.array([r['duration_h'] for r in candidates])
-            cost = .5*(scores-scores.min())/max(float(np.ptp(scores)),1e-15)+.5*(durations-durations.min())/max(float(np.ptp(durations)),1e-15)
-            balanced = candidates[int(np.argmin(cost))]
-        return dict(zip(('plan_a','plan_b','plan_c'), (a,b,balanced)))
-
-    plans_by_id = {}; budget_results = []
-    for budget_h in c['budgets_h']:
-        within = [r for r in valid if r['duration_h'] <= budget_h+1e-10]
-        feasible = [r for r in within if r['gdop'] <= c['gdop']]
-        chosen = choose(feasible)
-        item = dict(budget_h=float(budget_h), n_valid=len(within), n_eligible=len(feasible),
-                    message='Complete' if feasible else 'No complete eligible route within this time budget.')
-        for key, row in chosen.items():
-            item[key] = None if row is None else row['candidate_id']
-            if row is not None and row['candidate_id'] not in plans_by_id:
-                plans_by_id[row['candidate_id']] = {k:v for k,v in row.items() if not k.startswith('_')}
-                plans_by_id[row['candidate_id']]['observations'] = row['_observations']
-        budget_results.append(item)
+    plans_by_id = {r['candidate_id']:{**{k:v for k,v in r.items() if not k.startswith('_')},
+                    'observations':r.get('_observations',[])} for r in rows if r['candidate_id'] in selected_ids}
+    for item in budget_results:
+        within = [r for r in valid if r['duration_h'] <= item['budget_h']+1e-10]
+        item.update(n_validation_success=sum(r['validation_status']=='success' for r in within),
+                    n_validation_failed=sum(r['validation_status']=='failed' for r in within))
     # Retain the old top-level contract as the largest budget's choices.
     plans = {key:plans_by_id.get(budget_results[-1][key]) for key in ('plan_a','plan_b','plan_c')}
     return dict(**plans, budget_values_h=c['budgets_h'].tolist(), budget_results=budget_results, plans_by_id=plans_by_id, all_results=[{k:v for k,v in r.items() if k not in ('trajectory','residuals_ms','_observations')} for r in rows],
@@ -429,10 +445,15 @@ def run_survey(body, progress=None, export_sink=None):
                                ['trajectories.py','closed_tours.py','fast_precision.py','profile_gradient.py']]]},
                 plan_trajectories={k:p['trajectory'] for k,p in plans.items() if p},
                 n_total=len(rows), n_valid=len(valid), n_eligible=len(eligible), n_beacons=len(c['beacons']),
+                n_validation_success=sum(r['validation_status']=='success' for r in valid),
+                n_validation_failed=sum(r['validation_status']=='failed' for r in valid),
                 criterion=c['criterion'], rng_seed=c['seed'], config=body,
-                search=dict(route_version=VERSION,scale_bounds_ratio=[float(c['ratios'][0]),float(c['ratios'][-1])],mean_depth_m=depth,round_counts=round_counts,refinement_rounds=c['refinement_rounds'],pool_frozen_before_shared_field=True),
+                search=dict(route_version=VERSION,scale_bounds_ratio=[float(c['ratios'][0]),float(c['ratios'][-1])],mean_depth_m=depth,round_counts=round_counts,refinement_rounds=c['refinement_rounds'],pool_frozen_before_shared_field=True,
+                            pool_frozen_before_validation=True,frozen_selection=frozen_selection,selection_sha256=selection_sha256),
                 message='Complete' if eligible else 'No candidate meets coverage, identifiability, duration and GDOP requirements. Review the candidate reasons.',
-                model_notes=['User minimum and maximum budgets define ten inclusive logarithmically spaced caps. Each complete candidate is simulated once; all caps select from these same results without truncating routes or rerandomizing observations.',
+                model_notes=['All budget choices are frozen from design scores before validation. Failed fits retain their original recommendations, scores, observations and failure reasons; validation never substitutes another route.',
+                  'Valid counts describe design feasibility, not successful estimation. Validation success and failure counts are reported separately.',
+                  'User minimum and maximum budgets define ten inclusive logarithmically spaced caps. Each complete candidate is simulated once; all caps share the same observations without truncating routes or rerandomizing observations.',
                   'Five families use one closed traversal. Circle plus cross runs the circle, first diameter, straight transfer and perpendicular diameter, ending without a forced return. Transfer travel counts in duration; transfer sampling is off by default. No extra laps are added. Transit from an unspecified port is excluded.',
                   'User scale bounds are strict. Search adds in-range budget-boundary scales and log-midpoints near C1, C2 and C3 winners. It is a finite refined search, not a global continuous optimum. Circle angle controls starting phase; other family angles control orientation.',
                   'Serial polling addresses one beacon per slot. Slots use the larger of the requested interval and conservative two-way acoustic occupancy.',

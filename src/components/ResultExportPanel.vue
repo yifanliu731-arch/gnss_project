@@ -13,7 +13,7 @@
         <el-table-column type="selection" :reserve-selection="true" width="45"/>
         <el-table-column :label="t(kind==='simulation'?'Route':'Beacon')" min-width="160"><template #default="{row}">{{ kind==='simulation' ? `${t(row.label)} · ${Number(row.size).toFixed(0)} m · ${row.angle_deg}°` : `B${row.beacon_id}` }}</template></el-table-column>
         <el-table-column :label="t(kind==='simulation'?criterion.toUpperCase()+' / m²':'Residual RMS / ms')" min-width="110"><template #default="{row}">{{ metric(row) }}</template></el-table-column>
-        <el-table-column :label="t('Status / reason')" min-width="180"><template #default="{row}">{{ t(row.reason ?? row.message ?? (kind==='simulation'?(row.valid?'Valid':'Failed'):row.status)) }}</template></el-table-column>
+        <el-table-column :label="t('Status / reason')" min-width="180"><template #default="{row}">{{ t(row.validation_status==='failed' ? 'Validation failed' : row.reason ?? row.message ?? (kind==='simulation'?(row.valid?'Valid designs':'Failed'):row.status)) }}<span v-if="row.validation_status==='failed'">: {{ t(row.validation_reason) }}</span></template></el-table-column>
       </el-table>
       <p class="export-note">{{ t('Selected results:') }} {{ selectedIds.length }}</p>
     </div>

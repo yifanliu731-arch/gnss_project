@@ -456,5 +456,11 @@
   "User upload": "用户上传",
   "Only the two files shown above are used. Load example replaces both files; a manual upload replaces only its own input. The files are never appended or mixed silently. Check that the background and historical profiles belong to a compatible region and reference convention.": "计算只使用上方显示的两份文件。加载样例会替换两份文件；手动上传只替换对应的一份，不会追加或暗中混入其他资料。请核对两份资料的海域与背景参考约定是否兼容。",
   "Updating file statistics…": "正在更新文件统计…",
-  "Statistics update automatically when files or validation settings change. Counts refer to profiles actually present in the files.": "文件或验证配置改变后自动更新统计；数量按文件中实际存在的剖面计算。"
+  "Statistics update automatically when files or validation settings change. Counts refer to profiles actually present in the files.": "文件或验证配置改变后自动更新统计；数量按文件中实际存在的剖面计算。",
+  "Recommendations are fixed before validation. A failed fit does not replace the selected route.": "推荐方案在验证前固定。解算失败会如实保留，不会替换原推荐航迹。",
+  "Validation failed · recommendation retained": "验证失败 · 保留原推荐",
+  "Design feasible ·": "设计可行 ·",
+  "All budget choices are frozen from design scores before validation. Failed fits retain their original recommendations, scores, observations and failure reasons; validation never substitutes another route.": "各预算的推荐均在验证前依据设计评分固定。拟合失败时保留原推荐、评分、观测及失败原因，不按验证结果换轨。",
+  "Valid counts describe design feasibility, not successful estimation. Validation success and failure counts are reported separately.": "有效数量表示设计可行的候选数。解算验证的成功和失败数量单独报告。",
+  "User minimum and maximum budgets define ten inclusive logarithmically spaced caps. Each complete candidate is simulated once; all caps share the same observations without truncating routes or rerandomizing observations.": "最短与最长预算确定包含端点的十档对数等距上限。每条完整候选只仿真一次，各预算共享原观测，不截断航迹或重新抽取随机观测。"
 }

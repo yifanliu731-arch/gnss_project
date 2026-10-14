@@ -85,14 +85,7 @@ def truth_observations(data, c, fields, day, candidate_id):
 
 
 def choose_plans(candidates, score):
-    if not candidates:
-        return dict.fromkeys(('plan_a','plan_b','plan_c'))
-    a = min(candidates, key=lambda r:(r[score],r['duration_h'],r['candidate_id']))
-    median = float(np.median([r[score] for r in candidates]))
-    b = min([r for r in candidates if r[score]<=median], key=lambda r:(r['duration_h'],r['candidate_id']))
-    scores = np.array([r[score] for r in candidates]); durations = np.array([r['duration_h'] for r in candidates])
-    cost = .5*(scores-scores.min())/max(float(np.ptp(scores)),1e-15)+.5*(durations-durations.min())/max(float(np.ptp(durations)),1e-15)
-    return dict(zip(('plan_a','plan_b','plan_c'), (a,b,candidates[int(np.argmin(cost))])))
+    return js.choose_plans(candidates, score)
 
 
 def run_profile_survey(body, progress=None, export_sink=None):

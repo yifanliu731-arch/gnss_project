@@ -29,7 +29,7 @@ def select_rows(saved, request):
         if not math.isfinite(cap) or cap not in saved['result']['budget_values_h']:
             raise ValueError('Select a time budget from this run.')
         gdop = float(saved['result']['config'].get('gdop_threshold', 2.5))
-        eligible = [r for r in rows if r.get('valid') and r.get('gdop', math.inf) <= gdop
+        eligible = [r for r in rows if r.get('design_valid', r.get('valid')) and r.get('gdop', math.inf) <= gdop
                     and r['duration_h'] <= cap + 1e-10 and math.isfinite(r.get(criterion, math.inf))]
         selected = sorted(eligible, key=lambda r: (r[criterion], r['duration_h'], r['candidate_id']))[:10]
     else:
