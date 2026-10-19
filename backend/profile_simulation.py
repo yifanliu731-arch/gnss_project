@@ -38,10 +38,13 @@ def profile_metrics(data, c, tracer, fields):
         average = float(np.trace(matrix))
     else:
         beta = average = 0.
-    metrics.update(c2_m2=metrics['c1_m2']+fields['alpha']**2*average,
-                   c3_m2=metrics['c1_m2']+fields['alpha']**2*beta,
-                   worst_bias_m2=fields['alpha']**2*beta,
-                   mean_risk_m2=metrics['c1_m2']+fields['alpha']**2*average)
+    scale = (fields['alpha']*c['rho'])**2
+    metrics.update(c2_m2=metrics['c1_m2']+scale*average,
+                   c3_m2=metrics['c1_m2']+scale*beta,
+                   worst_bias_m2=scale*beta,
+                   mean_risk_m2=metrics['c1_m2']+scale*average,
+                   unit_c2_m2=metrics['c1_m2']+fields['alpha']**2*average,
+                   unit_c3_m2=metrics['c1_m2']+fields['alpha']**2*beta)
     return metrics
 
 
@@ -177,7 +180,7 @@ def run_profile_survey(body, progress=None, export_sink=None):
                          solver_remaining_scaled_step=fit['solver_remaining_scaled_step'])
             if day==fields['detail_date']:
                 # Preserve the frozen scores: retained-geometry risk is a diagnostic.
-                row.update({k:v for k,v in fit.items() if k not in ('c1_m2','c2_m2','c3_m2','worst_bias_m2','gdop','condition_number')})
+                row.update({k:v for k,v in fit.items() if k not in ('c1_m2','c2_m2','c3_m2','worst_bias_m2','unit_c2_m2','unit_c3_m2','gdop','condition_number')})
                 row.update(validation_status='success',validation_date=day,**details,observations_count=len(data['times']),
                            retained_gdop=retained['gdop'],retained_c1_m2=retained['c1_m2'],
                            rmse=fit['rmse_horizontal_m'],rmse_position_m=fit['rmse_horizontal_m'],solver_type='joint_map')
@@ -226,8 +229,8 @@ def run_profile_survey(body, progress=None, export_sink=None):
                 all_results=[{k:v for k,v in row.items() if k not in ('trajectory','residuals_ms','_observations')} for row in rows],
                 provenance=provenance,plan_trajectories={k:p.get('trajectory',[]) for k,p in top.items() if p},
                 n_total=len(rows),n_valid=len(valid),n_eligible=len(eligible),n_beacons=len(c['beacons']),
-                criterion=c['criterion'],rng_seed=c['seed'],config=body,
-                search=dict(route_version=VERSION,round_counts=round_counts,refinement_rounds=c['refinement_rounds'],
+                criterion=c['criterion'],rng_seed=c['seed'],risk_radius=c['rho'],config={**body,'risk_radius':c['rho']},
+                search=dict(route_version=VERSION,refinement_risk_radius=1.,round_counts=round_counts,refinement_rounds=c['refinement_rounds'],
                             pool_frozen_before_validation=True,selection_sha256=hashlib.sha256(frozen).hexdigest()),
                 field_validation=dict(**fields['metadata'],comparisons=comparisons,trials=trials,
                     dates_evaluated=validation_dates,fits=len(trials),failed_fits=sum(not r['success'] for r in trials)),
@@ -235,9 +238,9 @@ def run_profile_survey(body, progress=None, export_sink=None):
                 model_notes=[
                     'Profile mode uses background plus amplified historical-minus-background differences. The uploaded background is fixed; only training dates define the uncentered risk model.',
                     'C1, C2 and C3 choices are frozen before validation. Failed tests remain attached to the original choices; validation never substitutes a better-performing route.',
-                    'C2 adds the environmental second-moment trace; C3 adds its largest eigenvalue. C2 is at least C3 numerically for the same matrix, but this does not order the robustness of their selected routes.',
+                    'C2 and C3 scale their environmental penalties by the squared risk radius. Keep radius 1 to use the uploaded training scale; changing the radius does not amplify validation profiles. The separate profile multiplier scales both design and validation perturbations.',
                     'Each validation date represents one static layered ocean for the complete survey. Daily profiles do not specify subdaily dynamics or a full three-dimensional field.',
-                    'C3 is a local unit-ellipsoid score based on the training second moment, not a calibrated confidence envelope or guaranteed error bound.',
+                    'C3 is a local ellipsoid score based on the training second moment and the chosen risk radius, not a calibrated confidence envelope or guaranteed error bound. Refinement uses radius 1 to keep the candidate pool independent of the chosen radius.',
                     'Validation retraces layered rays through the perturbed profile. Unreachable arrivals are omitted without shortening the route; retained coverage, GDOP and solver checks still apply.',
                     'Route errors are simulated coordinate errors. MSE averages squared errors over all 3N coordinates; 3D RMS is sqrt(3 MSE). Correlated dates are not independent Monte Carlo repetitions.',
                     'Detailed solutions and observation exports use the selected detail date. Other dates are retained in the validation comparison and trial exports.',

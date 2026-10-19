@@ -31,11 +31,12 @@
       <el-form label-position="top" :disabled="disabled || loading" class="controls">
         <el-form-item :label="t('Training end (inclusive)')"><el-date-picker v-model="settings.training_end" type="date" value-format="YYYY-MM-DD" :clearable="false" :aria-label="t('Training end (inclusive)')"/></el-form-item>
         <el-form-item :label="t('Validation start (inclusive)')"><el-date-picker v-model="settings.validation_start" type="date" value-format="YYYY-MM-DD" :clearable="false" :aria-label="t('Validation start (inclusive)')"/></el-form-item>
-        <el-form-item :label="t('Perturbation multiplier')"><el-select v-model="settings.amplitude" :aria-label="t('Perturbation multiplier')"><el-option v-for="a in [.5,1,2,5]" :key="a" :value="a" :label="`${a}×`"/></el-select></el-form-item>
+        <el-form-item :label="t('Profile anomaly multiplier')"><el-select v-model="settings.amplitude" :aria-label="t('Profile anomaly multiplier')"><el-option v-for="a in [.5,1,2,5]" :key="a" :value="a" :label="`${a}×`"/></el-select></el-form-item>
         <el-form-item :label="t('Validation scope')"><el-select v-model="settings.validation_scope" :aria-label="t('Validation scope')"><el-option value="single" :label="t('One held-out date (quick test)')"/><el-option value="all" :label="t('Every held-out date (longer run)')"/></el-select></el-form-item>
         <el-form-item :label="t('Detailed solution date')"><el-date-picker v-model="settings.validation_date" type="date" value-format="YYYY-MM-DD" :clearable="false" :aria-label="t('Detailed solution date')"/></el-form-item>
         <el-form-item :label="t('Check input files and split')"><el-button :loading="checking" @click="check">{{ t('Check profiles') }}</el-button></el-form-item>
       </el-form>
+      <p class="note">{{ t('This profile multiplier scales both training and validation anomalies. Keep it at 1 for the supplied amplitudes; use the separate risk radius ρ to adjust design risk only.') }}</p>
       <p class="note">{{ t('Dates after training and before validation form an unused gap. Each test profile stays static for the entire survey. Multipliers change amplitude, not spatial gradient or occurrence probability.') }}</p>
       <p class="note">{{ t('CSV only: depth in metres, speed in m/s, dates YYYY-MM-DD. Profiles must cover sea level to at least 100 m below the deepest beacon. All supplied knots are retained; there is no automatic deep extension.') }}</p>
       <div v-if="metadata" class="metadata" role="status">

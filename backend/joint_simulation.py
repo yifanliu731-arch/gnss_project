@@ -22,6 +22,12 @@ def number(body, key, default, low, high):
 def configuration(body):
     if not isinstance(body, dict):
         raise ValueError('Request must be an object containing array and simulation parameters.')
+    try:
+        rho = number(body, 'risk_radius', 1., 0., 100.)
+        if isinstance(body.get('risk_radius'), bool):
+            raise ValueError
+    except (ValueError, TypeError, OverflowError):
+        raise ValueError('Risk radius must be a finite number from 0 to 100.') from None
     b = np.asarray(body.get('array_points', []), dtype=float)
     if b.ndim != 2 or b.shape[1] != 3 or not 1 <= len(b) <= 64 or not np.isfinite(b).all():
         raise ValueError('Enter 1 to 64 finite ENU beacon coordinate triples.')
@@ -57,9 +63,13 @@ def configuration(body):
         raise ValueError('Invalid orientation configuration.')
     if ratios.ndim != 1 or not 1 <= len(ratios) <= 12 or not np.isfinite(ratios).all() or np.any((ratios <= 0) | (ratios > 100)):
         raise ValueError('Scales must be positive and at most 100 times mean depth.')
-    rounds=number(body,'refinement_rounds',1,0,2)
-    if rounds!=int(rounds):raise ValueError('Refinement rounds must be 0, 1 or 2.')
-    c = dict(beacons=b, lever=lever, modes=list(dict.fromkeys(modes)), angles=np.unique(angles % 360), ratios=np.unique(ratios), refinement_rounds=int(rounds))
+    try:
+        rounds=number(body,'refinement_rounds',1,0,10)
+        if rounds!=int(rounds) or isinstance(body.get('refinement_rounds'), bool):
+            raise ValueError
+    except (ValueError, TypeError, OverflowError):
+        raise ValueError('Refinement rounds must be an integer from 0 to 10.') from None
+    c = dict(beacons=b, lever=lever, modes=list(dict.fromkeys(modes)), angles=np.unique(angles % 360), ratios=np.unique(ratios), refinement_rounds=int(rounds), rho=rho)
     c.update(speed=number(body, 'ship_speed_kn', 3, .1, 30)*.514444,
              interval=1/number(body, 'sample_freq_hz', .05, .001, 10),
              sw=number(body, 'noise', .0001, 0., .1),
@@ -226,7 +236,11 @@ def design_metrics(data,c,tracer, *, return_gain=False):
         rows = j0[data['ids'] == i, 3*i:3*i+3]*1500
         sv = np.linalg.svd(rows, compute_uv=False)
         gdops.append(float(np.sqrt(np.sum(1/sv**2))) if len(sv)==3 and sv[-1]>sv[0]*1e-10 else float('inf'))
-    metrics = dict(c1_m2=c1,c2_m2=c1+float(np.trace(bias_cov)/(3*n)),c3_m2=c1+worst,worst_bias_m2=worst,gdop=max(gdops),condition_number=float(singular[0]/singular[-1]))
+    average = float(np.trace(bias_cov)/(3*n))
+    radius_squared = c['rho']**2
+    metrics = dict(c1_m2=c1,c2_m2=c1+radius_squared*average,c3_m2=c1+radius_squared*worst,
+                   worst_bias_m2=radius_squared*worst,unit_c2_m2=c1+average,unit_c3_m2=c1+worst,
+                   gdop=max(gdops),condition_number=float(singular[0]/singular[-1]))
     return (metrics, gain) if return_gain else metrics
 
 
@@ -318,10 +332,12 @@ def initial_specs(c):
 
 
 def risk_refinements(rows, budgets, gdop):
-    """Include C2 neighbourhoods through the same shared refinement primitive."""
-    average_rows = [dict(r,c3_m2=r.get('c2_m2',r.get('c3_m2',float('inf')))) for r in rows]
-    proposals = refinements(rows,budgets,gdop)+refinements(average_rows,budgets,gdop)
-    # Stable common pool for all three choices; no dependence on test outcomes.
+    """Refine at unit radius so rho cannot redraw the shared validation field."""
+    unit_rows = [dict(r,c2_m2=r.get('unit_c2_m2',r.get('c2_m2',float('inf'))),
+                        c3_m2=r.get('unit_c3_m2',r.get('c3_m2',float('inf')))) for r in rows]
+    average_rows = [dict(r,c3_m2=r['c2_m2']) for r in unit_rows]
+    proposals = refinements(unit_rows,budgets,gdop)+refinements(average_rows,budgets,gdop)
+    # Same pool for every criterion and radius; no dependence on test outcomes.
     return list({tuple(p[:3]):p for p in proposals}.values())
 
 
@@ -447,18 +463,18 @@ def run_survey(body, progress=None, export_sink=None):
                 n_total=len(rows), n_valid=len(valid), n_eligible=len(eligible), n_beacons=len(c['beacons']),
                 n_validation_success=sum(r['validation_status']=='success' for r in valid),
                 n_validation_failed=sum(r['validation_status']=='failed' for r in valid),
-                criterion=c['criterion'], rng_seed=c['seed'], config=body,
-                search=dict(route_version=VERSION,scale_bounds_ratio=[float(c['ratios'][0]),float(c['ratios'][-1])],mean_depth_m=depth,round_counts=round_counts,refinement_rounds=c['refinement_rounds'],pool_frozen_before_shared_field=True,
+                criterion=c['criterion'], rng_seed=c['seed'], risk_radius=c['rho'], config={**body,'risk_radius':c['rho']},
+                search=dict(route_version=VERSION,refinement_risk_radius=1.,scale_bounds_ratio=[float(c['ratios'][0]),float(c['ratios'][-1])],mean_depth_m=depth,round_counts=round_counts,refinement_rounds=c['refinement_rounds'],pool_frozen_before_shared_field=True,
                             pool_frozen_before_validation=True,frozen_selection=frozen_selection,selection_sha256=selection_sha256),
                 message='Complete' if eligible else 'No candidate meets coverage, identifiability, duration and GDOP requirements. Review the candidate reasons.',
                 model_notes=['All budget choices are frozen from design scores before validation. Failed fits retain their original recommendations, scores, observations and failure reasons; validation never substitutes another route.',
                   'Valid counts describe design feasibility, not successful estimation. Validation success and failure counts are reported separately.',
                   'User minimum and maximum budgets define ten inclusive logarithmically spaced caps. Each complete candidate is simulated once; all caps share the same observations without truncating routes or rerandomizing observations.',
                   'Five families use one closed traversal. Circle plus cross runs the circle, first diameter, straight transfer and perpendicular diameter, ending without a forced return. Transfer travel counts in duration; transfer sampling is off by default. No extra laps are added. Transit from an unspecified port is excluded.',
-                  'User scale bounds are strict. Search adds in-range budget-boundary scales and log-midpoints near C1, C2 and C3 winners. It is a finite refined search, not a global continuous optimum. Circle angle controls starting phase; other family angles control orientation.',
+                  'User scale bounds are strict. Search adds in-range budget-boundary scales and log-midpoints near C1, C2 and C3 winners at radius 1. Changing the risk radius preserves the candidate pool. It is a finite refined search, not a global continuous optimum. Circle angle controls starting phase; other family angles control orientation.',
                   'Serial polling addresses one beacon per slot. Slots use the larger of the requested interval and conservative two-way acoustic occupancy.',
                   'Layered Snell rays with perturbations integrated along the reference ray: exp(-depth/1000 m), shared OU amplitude and fixed horizontal gradients.',
                   'Jointly estimates all beacon coordinates, common sound-speed offset, delay, linear drift and relative beacon delays. No coordinate truth priors.',
-                  'C1 is nominal variance; C2 adds the trace of the environmental risk matrix; C3 adds its largest eigenvalue at radius 1. Their probability and bounded-set interpretations differ. Position errors are one simulation realisation, not repeated-trial MSE.',
+                  'C1 is nominal variance. C2 and C3 add the environmental matrix trace and largest eigenvalue, respectively, multiplied by the squared risk radius. The radius changes design scores, not validation observations. Position errors are one simulation realisation, not repeated-trial MSE.',
                   'Nuisance prior SDs: sound offset 2 m/s, common/relative delays 5 ms, drift 1 ms/hour. Effective timing noise has a 0.1 microsecond numerical floor. C1 includes prior uncertainty.',
                   'Range is an assumed slant-range cutoff, without a device link budget, separate transmit/receive positions or full 3D acoustics. Scoring approximates GNSS errors as independent time noise.'])
