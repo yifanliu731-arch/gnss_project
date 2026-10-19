@@ -100,7 +100,7 @@ def run_profile_survey(body, progress=None, export_sink=None):
         raise ValueError('The SSP must extend at least 100 m below the deepest beacon for free-depth estimation.')
     rows = []; seen = set(); round_counts = []; depth = float(np.mean(-c['beacons'][:,2]))
     specs = js.initial_specs(c)
-    for stage in range(c['refinement_rounds']+1):
+    for stage in range(js.refinement_stage_limit(c)+1):
         pending = [x for x in specs if x[:3] not in seen]
         if len(rows)+len(pending)>2000:
             raise ValueError('Scale search exceeds 2000 candidates. Reduce families, angles, seed scales or refinement rounds; no candidates were silently dropped.')
@@ -125,8 +125,10 @@ def run_profile_survey(body, progress=None, export_sink=None):
                 row['reason'] = str(exc)
             rows.append(row)
             if progress:
-                progress(index+1,len(pending),dict(row,phase='search',stage=stage,rounds=c['refinement_rounds']+1))
-        specs = js.risk_refinements(rows,c['budgets_h'],c['gdop']) if stage<c['refinement_rounds'] else []
+                progress(index+1,len(pending),dict(row,phase='search',stage=stage,rounds=js.refinement_stage_limit(c)+1))
+        specs, refinement_status = js.next_refinement(rows,c,stage)
+        if c['refinement_mode']=='time_gap' and not specs:
+            break
     # Freeze all budget choices using training-only scores, before any test fits.
     valid = [r for r in rows if r['design_valid']]
     eligible = [r for r in valid if r['gdop']<=c['gdop']]
@@ -229,8 +231,8 @@ def run_profile_survey(body, progress=None, export_sink=None):
                 all_results=[{k:v for k,v in row.items() if k not in ('trajectory','residuals_ms','_observations')} for row in rows],
                 provenance=provenance,plan_trajectories={k:p.get('trajectory',[]) for k,p in top.items() if p},
                 n_total=len(rows),n_valid=len(valid),n_eligible=len(eligible),n_beacons=len(c['beacons']),
-                criterion=c['criterion'],rng_seed=c['seed'],risk_radius=c['rho'],config={**body,'risk_radius':c['rho']},
-                search=dict(route_version=VERSION,refinement_risk_radius=1.,round_counts=round_counts,refinement_rounds=c['refinement_rounds'],
+                criterion=c['criterion'],rng_seed=c['seed'],risk_radius=c['rho'],config=js.effective_config(body,c),
+                search=dict(route_version=VERSION,round_counts=round_counts,**js.refinement_metadata(c,round_counts,refinement_status),
                             pool_frozen_before_validation=True,selection_sha256=hashlib.sha256(frozen).hexdigest()),
                 field_validation=dict(**fields['metadata'],comparisons=comparisons,trials=trials,
                     dates_evaluated=validation_dates,fits=len(trials),failed_fits=sum(not r['success'] for r in trials)),

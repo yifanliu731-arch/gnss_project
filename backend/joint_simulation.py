@@ -13,6 +13,8 @@ from closed_survey import SurveyTour, FAMILIES
 from risk_design.closed_tours import scale_grid, refinements, VERSION
 from munk_ssp import generate_munk_ssp_table
 
+MAX_TIME_GAP_ROUNDS = 30
+
 def number(body, key, default, low, high):
     value = float(body.get(key, default))
     if not np.isfinite(value) or value < low or value > high:
@@ -63,13 +65,25 @@ def configuration(body):
         raise ValueError('Invalid orientation configuration.')
     if ratios.ndim != 1 or not 1 <= len(ratios) <= 12 or not np.isfinite(ratios).all() or np.any((ratios <= 0) | (ratios > 100)):
         raise ValueError('Scales must be positive and at most 100 times mean depth.')
+    mode = body.get('refinement_mode', 'rounds')
+    if mode not in ('rounds', 'time_gap'):
+        raise ValueError('Refinement mode must be rounds or time_gap.')
     try:
         rounds=number(body,'refinement_rounds',1,0,10)
         if rounds!=int(rounds) or isinstance(body.get('refinement_rounds'), bool):
             raise ValueError
     except (ValueError, TypeError, OverflowError):
         raise ValueError('Refinement rounds must be an integer from 0 to 10.') from None
-    c = dict(beacons=b, lever=lever, modes=list(dict.fromkeys(modes)), angles=np.unique(angles % 360), ratios=np.unique(ratios), refinement_rounds=int(rounds), rho=rho)
+    gap = 5.
+    if mode == 'time_gap':
+        try:
+            gap = number(body, 'refinement_time_gap_min', 5., .1, 2880.)
+            if isinstance(body.get('refinement_time_gap_min'), bool):
+                raise ValueError
+        except (ValueError, TypeError, OverflowError):
+            raise ValueError('Target time gap must be a finite number from 0.1 to 2880 minutes.') from None
+    c = dict(beacons=b, lever=lever, modes=list(dict.fromkeys(modes)), angles=np.unique(angles % 360), ratios=np.unique(ratios), refinement_rounds=int(rounds),
+             refinement_mode=mode, refinement_time_gap_min=gap, rho=rho)
     c.update(speed=number(body, 'ship_speed_kn', 3, .1, 30)*.514444,
              interval=1/number(body, 'sample_freq_hz', .05, .001, 10),
              sw=number(body, 'noise', .0001, 0., .1),
@@ -341,6 +355,68 @@ def risk_refinements(rows, budgets, gdop):
     return list({tuple(p[:3]):p for p in proposals}.values())
 
 
+def refinement_stage_limit(c):
+    return MAX_TIME_GAP_ROUNDS if c['refinement_mode']=='time_gap' else c['refinement_rounds']
+
+
+def time_gap_refinements(rows, budgets, gdop, target_min):
+    """Filter the existing unit-radius proposals by their parent time interval.
+
+    Duration includes the full route and transfers. Existing invalid designs
+    remain interval boundaries, exactly as in the shared refinement primitive.
+    Re-evaluating after each round follows any newly winning size.
+    """
+    proposals = risk_refinements(rows, budgets, gdop)
+    groups = {}
+    for row in rows:
+        groups.setdefault((row['type'], row['angle_deg']), []).append(row)
+    groups = {key:sorted(group, key=lambda r:r['ratio']) for key,group in groups.items()}
+    pending = []; gaps = []
+    for proposal in proposals:
+        family, ratio, angle, _ = proposal
+        group = groups[(family, angle)]
+        index = int(np.searchsorted([r['ratio'] for r in group], ratio))
+        if not 0 < index < len(group):
+            raise ValueError('A refinement midpoint has no neighbouring size interval.')
+        gap = abs(group[index]['duration_h']-group[index-1]['duration_h'])*60
+        gaps.append(gap)
+        if gap > target_min+1e-9:
+            pending.append(proposal)
+    return pending, max(gaps) if gaps else None
+
+
+def next_refinement(rows, c, stage):
+    """Return the next batch and an explicit stopping assessment."""
+    if c['refinement_mode']=='rounds':
+        done = stage >= c['refinement_rounds']
+        return ([] if done else risk_refinements(rows,c['budgets_h'],c['gdop'])), dict(
+            stop_reason='round_limit' if done else None, max_winner_gap_min=None, target_met=None)
+    specs, max_gap = time_gap_refinements(rows,c['budgets_h'],c['gdop'],c['refinement_time_gap_min'])
+    status = dict(max_winner_gap_min=max_gap, target_met=max_gap is not None and not specs,
+                  stop_reason=None if specs else ('time_gap_reached' if max_gap is not None else 'no_refinement_intervals'))
+    if specs and stage >= MAX_TIME_GAP_ROUNDS:
+        raise ValueError('Target time gap was not reached within 30 refinement rounds. Increase the target time gap or narrow the size range.')
+    return specs, status
+
+
+def refinement_metadata(c, round_counts, status):
+    return dict(refinement_mode=c['refinement_mode'], refinement_risk_radius=1.,
+                refinement_rounds=c['refinement_rounds'] if c['refinement_mode']=='rounds' else None,
+                refinement_time_gap_min=c['refinement_time_gap_min'] if c['refinement_mode']=='time_gap' else None,
+                refinement_rounds_completed=sum(n>0 for n in round_counts[1:]), **status)
+
+
+def effective_config(body, c):
+    config = {**body, 'risk_radius':c['rho'], 'refinement_mode':c['refinement_mode']}
+    if c['refinement_mode']=='time_gap':
+        config.pop('refinement_rounds', None)
+        config['refinement_time_gap_min'] = c['refinement_time_gap_min']
+    else:
+        config.pop('refinement_time_gap_min', None)
+        config['refinement_rounds'] = c['refinement_rounds']
+    return config
+
+
 def choose_plans(candidates, score):
     """Design-stage choices only; never filter by validation outcome."""
     if not candidates:
@@ -376,7 +452,7 @@ def run_survey(body, progress=None, export_sink=None):
     # Search depends only on nominal geometry, declared risk and coverage.
     # Freeze the final pool before drawing its shared environmental realization.
     seen=set();round_counts=[]
-    for stage in range(c['refinement_rounds']+1):
+    for stage in range(refinement_stage_limit(c)+1):
         pending=[x for x in specs if x[:3] not in seen]
         if len(rows)+len(pending)>2000:
             raise ValueError('Scale search exceeds 2000 candidates. Reduce families, angles, seed scales or refinement rounds; no candidates were silently dropped.')
@@ -394,8 +470,10 @@ def run_survey(body, progress=None, export_sink=None):
                 row.update(design_metrics(d,c,tracer));row.update(valid=True,design_valid=True,validation_status='pending')
             except (ValueError,np.linalg.LinAlgError) as error:row['reason']=str(error)
             rows.append(row)
-            if progress:progress(index+1,len(pending),dict(row,phase='search',stage=stage,rounds=c['refinement_rounds']+1))
-        specs=risk_refinements(rows,c['budgets_h'],c['gdop']) if stage<c['refinement_rounds'] else []
+            if progress:progress(index+1,len(pending),dict(row,phase='search',stage=stage,rounds=refinement_stage_limit(c)+1))
+        specs, refinement_status = next_refinement(rows,c,stage)
+        if c['refinement_mode']=='time_gap' and not specs:
+            break
     # Freeze every budget's recommendation before any validation fit or outcome.
     score = c['criterion']+'_m2'
     valid = [r for r in rows if r['design_valid'] and np.isfinite(r[score])]
@@ -463,8 +541,8 @@ def run_survey(body, progress=None, export_sink=None):
                 n_total=len(rows), n_valid=len(valid), n_eligible=len(eligible), n_beacons=len(c['beacons']),
                 n_validation_success=sum(r['validation_status']=='success' for r in valid),
                 n_validation_failed=sum(r['validation_status']=='failed' for r in valid),
-                criterion=c['criterion'], rng_seed=c['seed'], risk_radius=c['rho'], config={**body,'risk_radius':c['rho']},
-                search=dict(route_version=VERSION,refinement_risk_radius=1.,scale_bounds_ratio=[float(c['ratios'][0]),float(c['ratios'][-1])],mean_depth_m=depth,round_counts=round_counts,refinement_rounds=c['refinement_rounds'],pool_frozen_before_shared_field=True,
+                criterion=c['criterion'], rng_seed=c['seed'], risk_radius=c['rho'], config=effective_config(body,c),
+                search=dict(route_version=VERSION,**refinement_metadata(c,round_counts,refinement_status),scale_bounds_ratio=[float(c['ratios'][0]),float(c['ratios'][-1])],mean_depth_m=depth,round_counts=round_counts,pool_frozen_before_shared_field=True,
                             pool_frozen_before_validation=True,frozen_selection=frozen_selection,selection_sha256=selection_sha256),
                 message='Complete' if eligible else 'No candidate meets coverage, identifiability, duration and GDOP requirements. Review the candidate reasons.',
                 model_notes=['All budget choices are frozen from design scores before validation. Failed fits retain their original recommendations, scores, observations and failure reasons; validation never substitutes another route.',

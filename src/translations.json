@@ -480,5 +480,20 @@
   "Refinement rounds must be an integer from 0 to 10.": "细化轮数须为 0 到 10 之间的整数。",
   "Select or type a round count": "选择轮数，或输入数字筛选",
   "No local refinement": "不做局部细化",
-  "Select 0–10 rounds, or type a number to filter the list; 0 keeps only seed and budget-boundary sizes. Each round reselects the best C1/C2/C3 sizes at ρ = 1 and adds logarithmic midpoints to their neighbours, retaining all previous candidates. The search stops after the requested rounds, even if the best size is unchanged. More rounds take longer; runs exceeding 2000 candidates are rejected.": "下拉选择 0–10 轮，也可输入数字筛选；0 表示仅计算初始及预算边界尺度。每轮以 ρ＝1 重新选出 C1/C2/C3 的最佳尺寸，在其与相邻尺寸之间添加对数中点，保留所有已有候选。达到设定轮数后停止，最佳尺寸不变也不会提前结束。轮数越多耗时越长；超过 2000 条候选时明确报错。"
+  "Select 0–10 rounds, or type a number to filter the list; 0 keeps only seed and budget-boundary sizes. Each round reselects the best C1/C2/C3 sizes at ρ = 1 and adds logarithmic midpoints to their neighbours, retaining all previous candidates. The search stops after the requested rounds, even if the best size is unchanged. More rounds take longer; runs exceeding 2000 candidates are rejected.": "下拉选择 0–10 轮，也可输入数字筛选；0 表示仅计算初始及预算边界尺度。每轮以 ρ＝1 重新选出 C1/C2/C3 的最佳尺寸，在其与相邻尺寸之间添加对数中点，保留所有已有候选。达到设定轮数后停止，最佳尺寸不变也不会提前结束。轮数越多耗时越长；超过 2000 条候选时明确报错。",
+  "Refine to target time gap": "细化至目标时间差",
+  "Minimum time unit (minutes)": "最小时间单元（分钟）",
+  "Default 5 minutes. Refine neighbouring sizes around the C1/C2/C3 winners at ρ = 1 until their full-route sailing-time gaps are no larger than this value. Winners are reselected each round; all existing candidates are retained.": "默认5分钟。以 ρ＝1 的 C1/C2/C3 优胜尺寸为中心细化，直到其与相邻尺寸的完整航时差均不大于设定值。每轮重新选优，保留所有已有候选。",
+  "Choose 0–3 rounds. Each round adds logarithmic midpoints around the C1/C2/C3 winners at ρ = 1 and retains all previous candidates; 0 uses seed and budget-boundary sizes only.": "选择0–3轮。每轮在 ρ＝1 的 C1/C2/C3 优胜尺寸附近增加对数中点，并保留已有候选；0表示仅计算初始及预算边界尺寸。",
+  "More refinement takes longer. Searches exceeding 2000 candidates stop with an explicit error; a time-gap target is not a guarantee of a global optimum.": "细化越多耗时越长；超过2000条候选时明确报错。达到目标时间差不代表保证找到全局最优。",
+  "Target time gap must be a finite number from 0.1 to 2880 minutes.": "目标时间差须为0.1到2880分钟之间的有限数值。",
+  "Refinement mode must be rounds or time_gap.": "细化模式须为固定轮数或目标时间差。",
+  "Choose 0, 1, 2 or 3 refinement rounds, or a target time gap.": "请选择0、1、2、3轮细化，或选择目标时间差。",
+  "Target time gap was not reached within 30 refinement rounds. Increase the target time gap or narrow the size range.": "细化30轮后仍未达到目标时间差，请增大时间差或缩小尺寸范围。",
+  "A refinement midpoint has no neighbouring size interval.": "细化中点缺少相邻尺寸区间，无法继续计算。",
+  "Completed refinement rounds": "实际细化轮数",
+  "Target time gap (min)": "目标时间差（分钟）",
+  "Largest remaining neighbour gap (min)": "剩余最大相邻航时差（分钟）",
+  "Time-gap target reached": "已达到目标时间差",
+  "No eligible neighbouring interval to refine.": "没有可继续细化的优胜候选相邻区间。"
 }
