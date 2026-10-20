@@ -33,6 +33,6 @@ export function setLocalizedOption(chart: {setOption: (...args: any[])=>void}, o
 }
 watch(locale, language=>{
   document.documentElement.lang=language === 'zh' ? 'zh-CN' : 'en'
-  document.title=language === 'zh' ? 'SeaArray · 航迹设计' : 'SeaArray · Survey Design'
+  document.title=language === 'zh' ? 'SeaArrayCalib · 海底阵列标定' : 'SeaArrayCalib · Seafloor Array Calibration'
   try { localStorage.setItem(preferenceKey,language) } catch { /* Storage may be unavailable. */ }
 },{immediate:true})

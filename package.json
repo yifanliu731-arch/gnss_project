@@ -1,5 +1,5 @@
 {
-  "name": "seafloor-positioning-web",
+  "name": "seaarraycalib",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -20,5 +20,5 @@
     "vue": "^3.5.40"
   },
   "license": "MIT",
-  "description": "Bilingual GNSS-A multi-beacon survey design and field-data web application"
+  "description": "SeaArrayCalib: bilingual GNSS-A survey design and joint seafloor beacon calibration"
 }

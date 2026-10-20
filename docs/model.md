@@ -1,5 +1,7 @@
 # Numerical workflow
 
+SeaArrayCalib operation guides: [中文](user-guide.zh-CN.md) · [English](user-guide.en.md). This document describes the numerical assumptions and limits behind the controls.
+
 ## Survey simulation
 
 The initial array has four corner beacons spanning 6 km east–west and 6 km north–south, centred at the ENU origin: E/N = ±3000 m, with depths B1 = 3150 m, B2 = 3180 m, B3 = 3220 m and B4 = 3250 m (negative U; mean depth 3200 m). Reset restores these coordinates. Users can change all coordinates and the beacon count.

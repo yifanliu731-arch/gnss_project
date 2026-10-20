@@ -2,7 +2,7 @@
 
 In **Survey design → Sound-field model → Background + historical profiles**, choose **Load South China Sea example**. This loads the two CSVs and the 182 / 14 / 170 calendar split without changing your array, equipment range or route settings. **Download example files** provides the same inputs for manual uploads.
 
-网页“航迹设计 → 声场模型 → 背景＋历史剖面”中可一键加载，或下载后分别上传两个 CSV。样例不会更改阵列、设备量程和选轨设置。默认只检验一个留出日期，适合先确认功能；选择“全部留出日期”会对每档预算冻结的 C1/C3 方案逐日检验，耗时更长。0.5、1、2、5 为扰动幅度倍数。
+网页“航迹设计 → 声场模型 → 背景＋历史剖面”中可一键加载，或下载后分别上传两个 CSV。样例不会更改阵列、设备量程和选轨设置。默认只检验一个留出日期，适合先确认功能；选择“全部留出日期”会对每档预算冻结的 C1/C2/C3 方案逐日检验，耗时更长。0.5、1、2、5 为扰动幅度倍数。完整操作见[中文使用说明](../../docs/user-guide.zh-CN.md)或[English user guide](../../docs/user-guide.en.md)。
 
 ## Files and interpretation
 

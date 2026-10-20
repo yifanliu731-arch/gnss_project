@@ -10,8 +10,8 @@
       <!-- Logo 区域 -->
       <div class="sidebar-logo">
         <el-icon :size="28" color="#6cc4f5"><Ship /></el-icon>
-        <span class="logo-text">{{ t("Array Calibration") }}</span>
-        <span class="logo-sub">{{ t("SeaArray Calib") }}</span>
+        <span class="logo-text">SeaArrayCalib</span>
+        <span class="logo-sub">{{ t("Array Calibration") }}</span>
       </div>
 
       <!-- 导航菜单 -->
@@ -52,7 +52,7 @@
       <el-header class="app-header">
         <div class="header-left">
           <el-icon :size="22"><Position /></el-icon>
-          <h1 class="header-title">{{ t("Seafloor Array Calibration") }}</h1>
+          <h1 class="header-title">SeaArrayCalib · {{ t("Seafloor Array Calibration") }}</h1>
         </div>
         <div class="header-right"><el-radio-group v-model="locale" size="small" aria-label="Language / 语言"><el-radio-button value="zh">中文</el-radio-button><el-radio-button value="en">EN</el-radio-button></el-radio-group>
           <el-tag type="info" size="small" effect="plain">

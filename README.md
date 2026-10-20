@@ -1,4 +1,18 @@
-# SeaArray · Survey Design
+# SeaArrayCalib
+
+**GNSS-A survey planning and joint seafloor beacon calibration / GNSS-A 航迹规划与海底信标联合标定。**
+
+SeaArrayCalib compares complete survey trajectories under sailing-time and acoustic constraints, evaluates declared sound-field risk, and calibrates beacon coordinates from simulated or uploaded observations. The interface supports Chinese and English.
+
+SeaArrayCalib 提供完整航迹规划、声场风险评价和多信标联合标定，支持 Munk 仿真、背景＋历史剖面仿真，以及实测 GNSS／走时／声速剖面处理。
+
+## User guides / 使用说明
+
+- [中文使用说明](docs/user-guide.zh-CN.md)：从启动和首次仿真，到风险半径、尺度细化、剖面验证、实测标定、结果解释与导出。
+- [English user guide](docs/user-guide.en.md): capabilities, setup, first run, parameters, refinement, profile validation, field calibration, results and troubleshooting.
+- [Numerical workflow / 模型与计算流程](docs/model.md) · [CSV formats / 数据格式](docs/data-format.md).
+
+Both guides describe the same current features. Use the guides for operation and the numerical workflow for model assumptions and implementation limits.
 
 ## Quick start / 一键启动
 
@@ -66,7 +80,7 @@ src/                     Vue interface and translations
 backend/                 API, numerical workflow and regression tests
 vendor/seaarray_core/     Bundled numerical primitives + source hashes
 examples/                Small documented measured-data example
-docs/                    Model and data-format documentation
+docs/                    Chinese/English user guides, model and CSV formats
 scripts/                 Numerical-module verification
 .github/workflows/       Build and regression checks
 start_all.bat            Windows one-click entry
@@ -79,11 +93,13 @@ stop_web.ps1             Stop services started by that launcher
 ```sh
 python -m pip install -r requirements-dev.txt
 python scripts/sync_core.py
-python -m unittest discover -s backend -p "test_*.py"
+python -X utf8 -m unittest discover -s backend -p "test_*.py"
 npm run build
 ```
 
 The bundled numerical modules are tracked by a source-hash manifest. Run `scripts/sync_core.py` to verify their integrity. Numerical changes require regression checks and updated validation.
+
+The UTF-8 flag keeps fixture decoding consistent on Windows systems whose default encoding differs from the supplied UTF-8 data.
 
 Alternate service addresses use frontend `VITE_API_URL` and backend `CORS_ORIGINS`. This is a local scientific tool; the launcher binds to loopback. CI and builds do not establish experimental validity. See [contribution guide](CONTRIBUTING.md).
 

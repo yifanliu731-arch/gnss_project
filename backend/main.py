@@ -78,7 +78,7 @@ def detected_beacon_ids(rows):
 # FastAPI application
 # ---------------------------------------------------------------------------
 app = FastAPI(
-    title="Seafloor Array Calibration API",
+    title="SeaArrayCalib API",
     version="1.0.0",
     description="Underwater beacon positioning — trajectory optimisation and simulation",
 )

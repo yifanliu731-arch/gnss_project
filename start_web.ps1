@@ -26,5 +26,5 @@ $web = Start-Process -FilePath $nodeExe -WorkingDirectory $webRoot -ArgumentList
 Start-Sleep -Seconds 3
 $api.Refresh(); $web.Refresh()
 if ($api.HasExited -or $web.HasExited) { throw 'A service exited. Inspect .run/api-error.log and .run/web-error.log.' }
-Write-Host "SeaArray is running at http://127.0.0.1:5173/ (API PID $($api.Id), web PID $($web.Id)). Logs: .run"
+Write-Host "SeaArrayCalib is running at http://127.0.0.1:5173/ (API PID $($api.Id), web PID $($web.Id)). Logs: .run"
 Start-Process 'http://127.0.0.1:5173/'
