@@ -11,15 +11,10 @@ def find_research_root():
         if not (root / 'research/src/risk_design/closed_tours.py').is_file():
             raise RuntimeError('SEAARRAY_ROOT is not a valid research checkout.')
         return root
-    candidates = [
-        Path(__file__).resolve().parents[1] / 'vendor/seaarray_core',
-        Path(__file__).resolve().parents[2] / 'SeaArrayCalib',
-        *Path(__file__).resolve().parents,
-    ]
-    for root in candidates:
-        if (root / 'research/src/risk_design/trajectories.py').is_file():
-            return root
-    raise RuntimeError('SeaArrayCalib/research/src was not found. Set SEAARRAY_ROOT.')
+    root = Path(__file__).resolve().parents[1] / 'vendor/seaarray_core'
+    if (root / 'research/src/risk_design/trajectories.py').is_file():
+        return root
+    raise RuntimeError('Bundled numerical core is missing. Restore vendor/seaarray_core or explicitly set SEAARRAY_ROOT for development.')
 
 RESEARCH_ROOT = find_research_root()
 for relative in ('research/src', 'src'):

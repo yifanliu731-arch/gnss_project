@@ -1,115 +1,120 @@
 # SeaArrayCalib
 
-**GNSS-A survey planning and joint seafloor beacon calibration / GNSS-A 航迹规划与海底信标联合标定。**
+A local web application for **GNSS-A survey planning and joint seafloor beacon calibration**. Compare complete survey trajectories within a sailing-time budget, evaluate prescribed sound-field risk, and estimate beacon coordinates from simulated or measured observations.
 
-SeaArrayCalib compares complete survey trajectories under sailing-time and acoustic constraints, evaluates declared sound-field risk, and calibrates beacon coordinates from simulated or uploaded observations. The interface supports Chinese and English.
+**GNSS-A 航迹规划与海底信标联合标定工具。** 支持中英文界面；运行和数据处理都在本机完成。
 
-SeaArrayCalib 提供完整航迹规划、声场风险评价和多信标联合标定，支持 Munk 仿真、背景＋历史剖面仿真，以及实测 GNSS／走时／声速剖面处理。
+- [中文使用说明](docs/user-guide.zh-CN.md)
+- [English user guide](docs/user-guide.en.md)
+- [Model and physical conventions](docs/model.md)
+- [Input CSV formats](docs/data-format.md)
+- [Paper simulation reproduction / 论文仿真复现](docs/reproducibility.md)
 
-## User guides / 使用说明
+## Capabilities
 
-- [中文使用说明](docs/user-guide.zh-CN.md)：从启动和首次仿真，到风险半径、尺度细化、剖面验证、实测标定、结果解释与导出。
-- [English user guide](docs/user-guide.en.md): capabilities, setup, first run, parameters, refinement, profile validation, field calibration, results and troubleshooting.
-- [Numerical workflow / 模型与计算流程](docs/model.md) · [CSV formats / 数据格式](docs/data-format.md).
-- [Paper simulation reproduction / 论文仿真复现](docs/reproducibility.md): fixed candidate pool, original noise streams, held-out dates and numerical regression checks.
+- Plan six complete trajectory families: circle, figure eight, clover, square, four-petal rose, and circle plus cross. Include transfer distances in sailing time.
+- Configure beacon layouts, lever arms, vessel speed, acoustic range, sampling, noise, and ten logarithmically spaced time budgets.
+- Compare C1 nominal variance, C2 average coordinate risk, and C3 worst-case coordinate risk under the specified perturbation model.
+- Simulate a Munk profile or upload a background profile with dated historical profiles; separate risk training from held-out validation.
+- Process measured GNSS, acoustic travel-time, and sound-speed CSV files. Joint and single-beacon processing are available; the user guides describe each solver.
+- Inspect tracks, coverage, diagnostics and residuals; export saved settings, summaries and selected results. Failed candidates and fits retain their reasons.
 
-Both guides describe the same current features. Use the guides for operation and the numerical workflow for model assumptions and implementation limits.
+Recommendations are fixed before validation. Switching language preserves inputs and results. Export results before restarting: jobs and uploaded data are held in API memory for the current session.
 
-## Quick start / 一键启动
+## Installation
 
-**Windows:** after the first-time setup below, double-click **`start_all.bat`**. It checks ports 8000 and 5173, stops identified previous SeaArrayCalib services, and starts the API and website at <http://127.0.0.1:5173/>. Logs are written to `.run/`. Double-click **`stop_all.bat`** to stop both services. Export results before restarting, because calculation results are held in API memory. Unrelated port owners are reported and left running. The launcher keeps service windows hidden and never installs dependencies automatically.
+Use **Python 3.12** and **Node.js 22.12 or later in the Node 22 series**. Download or clone this repository, then open a terminal in its root directory.
 
-**首次使用：**安装 Python 3.12 和 Node.js 22（22.12 或更新），在项目目录执行：
+### Windows
 
 ```powershell
 python -m venv .venv
 .venv\Scripts\python -m pip install -r requirements.txt
 npm ci
-.\start_all.bat
 ```
 
-The app is self-contained. The launcher prefers this project's `.venv`; an available local development environment or Python on PATH can also be used. To stop, run `powershell -ExecutionPolicy Bypass -File stop_web.ps1`.
+Double-click **start_all.bat**, then open **http://127.0.0.1:5173/**. The launcher checks ports 8000 and 5173, restarts identified previous SeaArrayCalib services, and waits for both services. It leaves unrelated port owners running. Logs are in `.run/`.
 
-### macOS / Linux / manual development
+Double-click **stop_all.bat** to stop the services. The launcher does not install dependencies automatically.
+
+中文：首次使用先执行上述安装步骤，以后双击 `start_all.bat` 启动、`stop_all.bat` 关闭；重启前请导出需要保留的结果。
+
+### macOS / Linux
 
 ```sh
 python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt
 npm ci
+```
+
+Start the backend and frontend in two terminals:
+
+```sh
 # Terminal 1
 .venv/bin/python -m uvicorn main:app --app-dir backend --host 127.0.0.1 --port 8000
 # Terminal 2
 npm run dev -- --host 127.0.0.1 --port 5173 --strictPort
 ```
 
-## What it does
+Stop each service with Ctrl+C. The backend address can be configured with frontend `VITE_API_URL`; allowed browser origins use backend `CORS_ORIGINS`.
 
-A Vue / FastAPI application for configurable multi-beacon GNSS-A survey design. Switch **中文 / EN** in the header without losing inputs, uploaded files or results.
+## First run and example data
 
-- General-N joint simulation, curved-ray propagation, serial acoustic scheduling and per-beacon range rejection.
-- Six complete track families: circle, figure eight, clover, square, four-petal rose and circle plus cross. The first five are closed curves. Circle plus cross runs one circle and two diameters joined by a straight transfer; it ends at the second diameter without a forced return. Transfer time is counted, while transfer sampling is off by default. No centre-return legs or extra laps are added.
-- User-defined scale limits, speed, array, risk assumptions and minimum/maximum time budgets. Ten logarithmically spaced caps include both endpoints; complete tracks are selected within each cap.
-- Rotation uses **180° divisions**: 1 → 0°; 2 → 0°/90°; 3 → 0°/60°/120°; 4 → 0°/45°/90°/135°.
-- Recommendations are fixed from design scores before validation in both sound-field modes. Failed fits retain the selected route, design scores and failure reason; they do not trigger a replacement. Design feasibility and validation outcomes are shown separately.
-- C1 / C2 / C3 selection: nominal variance, average coordinate risk and worst-case coordinate risk under a declared perturbation set. Candidate refinement uses all three criteria at radius 1 on one shared pool. The refinement dropdown offers 0–3 rounds (default 1), followed by **Refine to target time gap**. That option reveals a minutes input, default **5 minutes**, and repeatedly bisects winner-neighbour intervals until their complete-route duration gaps meet the target. All earlier candidates are retained, with an explicit 2000-candidate limit. / 下拉框依次为0、1、2、3轮和“细化至目标时间差”；选择最后一项后显示分钟输入，默认5分钟。保留原候选，按优胜尺寸相邻区间的完整航时差停止，超过2000条候选时报错。
-- Independent **design perturbation multiplier / risk radius ρ**, default **1** (0–100). It adjusts Munk design risk and also works with uploaded profiles, where **1 is recommended**. C2/C3 environmental penalties scale as ρ²; validation fields and noise stay fixed. The separate profile anomaly multiplier changes both training and validation amplitudes.
-- **独立设计扰动倍数／风险半径 ρ**：默认 1，主要调节 Munk 设计风险；上传声速剖面时同样可用，建议保持 1。ρ 只改变风险评分和选轨，不放大验证声场；剖面异常倍数则同时调整训练与验证幅度。
-- Optional two-file sound-field simulation: measured background plus dated same-region historical profiles; training/gap/validation split; 0.5×, 1×, 2× and 5× anomaly amplitudes; exact held-out profile ray tracing and comparison of the frozen selections. The default Munk demonstration remains available.
-- Measured GNSS, travel-time and SSP upload with automatic beacon-ID discovery. Joint array calibration is the default; single-beacon fitting uses the same curved-ray/MAP model independently for each selected beacon. Legacy TOA/ABIC/ESKF solvers remain available.
-- Field tracks switch between smoothed curves and unconnected points. Curve smoothing is display-only within each segment; faint, thin, widely spaced dashed links mark navigation gaps. Joint/single-model residual plots identify beacons and UTC, report RMS, and use observed minus fitted travel time in milliseconds.
+For simulation, enter the array and operating conditions, choose a sound-field mode and trajectory families, and run the calculation. See the user guide for units, risk radius, refinement settings and interpretation.
 
-See [numerical workflow](docs/model.md) for assumptions, parameter definitions and limits.
+For measured data, use the [large-circle-plus-cross example](examples/large_circle_cross/README.md): upload `gnss.csv`, `delay.csv` and `ssp.csv`, and select beacon IDs **2, 5, 6**. This example preserves original UTC across separate observation periods; it is not one continuous voyage.
 
-## Try profile-driven simulation / 声场扰动与留出验证
+The [South China Sea profile example](examples/south_china_sea_profiles/README.md) provides `background.csv` and `history.csv`. It contains processed profiles, not two raw CTD casts. The interface can load or download these files. Their provenance, date split and upstream attribution are documented alongside them.
 
-In **Survey design → Sound-field model**, select **Background + historical profiles** and click **Load South China Sea example**. The [two documented CSVs](examples/south_china_sea_profiles/README.md) contain the derived fixed background and all 366 dated profiles from 2020. Use **Download example files** for manual uploads. Input formats are `depth_m,sound_speed_mps` and `date,depth_m,sound_speed_mps` (ISO dates).
+There are **seven data CSVs** in the repository: three measured-upload files, two processed profile files, and the two numerical-library templates. The template SSP duplicates the measured SSP. No other field-observation archive is included.
 
-The sample separates 182 training days, a 14-day gap and 170 validation days. Start with one held-out date, or select all held-out dates for a longer run. Choose C1, C2 or C3 for the displayed optimal plan; the result also compares the three frozen selections at each time cap. Only training data guide scores and selection. Identical selected routes are fitted once per date and reused. Failures and missing arrivals remain visible; MSE on successful dates is explicitly conditional when any fit fails. This software example is a retrospective holdout, not a never-inspected confirmatory dataset.
+## Reproduce the main paper simulation
 
-File statistics update automatically after an upload or a date-setting change. Counts reflect dated profiles actually present, not the calendar span. Depth knots and maximum depth come from the supplied profiles. Loading the example replaces both files and the split settings; a manual upload replaces only its corresponding file. The page labels each input's source. Downloading the example leaves the current inputs unchanged.
+After installing the Python dependencies:
 
-中文：先选择“背景＋历史剖面”，加载内置南海资料或上传自己的两份 CSV；设定建模、验证日期和扰动倍数，再用右侧现有航迹、设备量程和预算设置运行。样例只加载资料，不更改这些设置。C2/C3 均考虑声场扰动：C2 关注平均风险，C3 关注规定椭球内最坏方向，二者不保证在所有测试中给出相同或最优结果。每日剖面在一次航次内保持静态；资料来源、背景对齐及深层处理见样例说明。
-
-## Try measured data / 实测样例
-
-The [large-circle-plus-cross example](examples/large_circle_cross/README.md) includes exactly the three upload CSVs: [GNSS](examples/large_circle_cross/gnss.csv), [delay](examples/large_circle_cross/delay.csv), [SSP](examples/large_circle_cross/ssp.csv). Use beacon IDs **2,5,6**. The example preserves original UTC across separate observation periods; it is not a single continuous voyage. See its README for lever arm, settings and provenance.
-
-## Repository layout
-
-```text
-src/                     Vue interface and translations
-backend/                 API, numerical workflow and regression tests
-vendor/seaarray_core/     Bundled numerical primitives + source hashes
-examples/                Small documented measured-data example
-docs/                    Chinese/English user guides, model and CSV formats
-scripts/                 Numerical-module verification
-.github/workflows/       Build and regression checks
-start_all.bat            Windows one-click entry
-start_web.ps1            Local service launcher
-stop_web.ps1             Stop services started by that launcher
+```sh
+python -X utf8 scripts/reproduce_paper.py smoke
+python -X utf8 scripts/reproduce_paper.py all
 ```
 
-## Development checks
+The smoke check replays three first-day cases. The full command recomputes the 702 fixed geometry scores, 30 budget selections, and 510 main-comparison route/day attempts, including retained failures. It uses the existing profile CSVs and writes reports under the ignored `.cache/` directory. See [scope, configuration and numerical checks](docs/reproducibility.md).
+
+The public measured example supports a field-processing demonstration. The full twelve-case field archive is available upon reasonable request to the corresponding author as described in the manuscript.
+
+## Project structure
+
+```text
+src/                       Vue interface, plots and translations
+public/                    Browser assets
+backend/                   FastAPI, solvers, propagation and regression tests
+vendor/seaarray_core/       Bundled numerical primitives and integrity manifest
+examples/                  Approved CSV examples, provenance and replay protocol
+docs/                      User guides, model, data formats and reproduction
+scripts/                   Core verification, replay and service helpers
+.github/workflows/         Automated build and numerical checks
+start_all.bat              Windows start entry
+stop_all.bat               Windows stop entry
+start_web.ps1, stop_web.ps1 Service launch/stop implementation
+```
+
+`node_modules/`, `dist/`, `.venv/`, `.run/` and `.cache/` are local dependency, build or runtime directories and are excluded from Git. The application includes its numerical dependencies and does not require a separate research checkout.
+
+## Development and verification
 
 ```sh
 python -m pip install -r requirements-dev.txt
 python scripts/sync_core.py
 python -X utf8 -m unittest discover -s backend -p "test_*.py"
+node --experimental-strip-types scripts/test_track_segments.mjs
 npm run build
 ```
 
-The bundled numerical modules are tracked by byte hashes and executable-AST fingerprints. Run `scripts/sync_core.py` to verify integrity; `--source ../SeaArrayCalib` additionally checks the recorded upstream revision. English documentation differs from upstream comments, and the portable configuration retains only imported exports. Numerical changes require regression checks and updated validation; source refreshes must be reviewed before updating the manifest.
+The core manifest verifies exact file bytes and executable AST fingerprints. `scripts/sync_core.py --source PATH` additionally verifies the recorded upstream revision. English comments and explicitly retained configuration exports are documented adaptations; numerical changes require review and new validation. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
-The UTF-8 flag keeps fixture decoding consistent on Windows systems whose default encoding differs from the supplied UTF-8 data.
+A successful fit or build does not establish independent field-position accuracy. The model guide explains assumptions, supported propagation branches, uncertainty and validation limits.
 
-Alternate service addresses use frontend `VITE_API_URL` and backend `CORS_ORIGINS`. This is a local scientific tool; the launcher binds to loopback. CI and builds do not establish experimental validity. See [contribution guide](CONTRIBUTING.md).
+## License and citation
 
-## License
+The software and measured track example use the [MIT license](LICENSE). Derived Copernicus profiles retain their [upstream data terms and attribution](examples/south_china_sea_profiles/README.md#source-and-attribution).
 
-[MIT](LICENSE) for the software and the measured track example. The derived Copernicus profile example retains its [upstream data terms and attribution](examples/south_china_sea_profiles/README.md#source-and-attribution). No remote repository is required for local use.
-
-## Result export and speed units
-
-Survey design defaults to 3 kn (approximately 1.5433 m/s). Select kn or m/s to enter speed; switching units preserves the underlying physical speed.
-
-After a calculation, **Export results** offers all results, the top 10, or a custom selection, with optional track coordinates, observations and residuals. A ZIP contains summary CSV, saved settings, JSON and one folder per selected result. Simulation top 10 uses design feasibility, the saved C1/C2/C3 criterion, the currently selected budget and the saved GDOP limit; validation failures remain eligible for this design ranking and retain their failure reasons. All includes failed candidates. In profile mode, all candidates have training-stage design status, but only selected plans have held-out fits. Detailed observations refer to the chosen detail date; validation trials and comparisons are separately exported, with the input CSV text and hashes in the saved settings. Field processing operates on one uploaded track: its top 10 is per-beacon residual RMS, not trajectory C3 or independent position accuracy. Original uploaded files can be included separately. Exports use saved data, without rerunning fits. Download before restarting the API; results are held in memory for the current server session.
+When using the software, cite **SeaArrayCalib** and record the exact version or commit. Machine-readable metadata is in [CITATION.cff](CITATION.cff).

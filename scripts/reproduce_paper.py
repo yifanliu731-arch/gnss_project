@@ -15,7 +15,6 @@ import sys
 sys.path.insert(0, str(ROOT / 'backend'))
 import argparse
 from concurrent.futures import ProcessPoolExecutor
-from datetime import date
 from functools import lru_cache
 import hashlib
 import json
