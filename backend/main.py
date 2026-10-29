@@ -22,14 +22,7 @@ import numpy as np
 import os
 import sys
 import pandas as pd
-from simulation_generator import (
-    generate_simulation_data,
-    load_ssp_from_csv,
-    _generate_circle,
-    _generate_circle_cross,
-    _generate_square,
-    _generate_asterisk,
-)
+from simulation_generator import load_ssp_from_csv
 from munk_ssp import generate_munk_ssp_table
 from real_solver import RealDataSolver
 from seaarray_calib import run_toa_calibration
@@ -86,9 +79,9 @@ app = FastAPI(
 # ---------------------------------------------------------------------------
 # CORS
 # ---------------------------------------------------------------------------
-# CORS 加固：本地开发工具无 Cookie/认证依赖，优先读环境变量 CORS_ORIGINS；
-# 未配置时放行所有来源，彻底规避 Vite 端口漂移与 localhost/127.0.0.1 不一致
-# 导致的轮询请求被 CORS 拦截问题。
+# Local development has no cookie authentication; CORS_ORIGINS overrides the defaults.
+# The defaults allow the listed localhost and loopback development ports.
+# Explicit wildcard origins disable credentials.
 _cors_origins_raw = os.environ.get(
     "CORS_ORIGINS",
     "http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,"
@@ -116,7 +109,7 @@ TASK_STORE: dict = {}
 
 
 def _json_safe(obj):
-    """递归把 NaN/Infinity/NumPy 标量转为 JSON 兼容值（NaN/Inf → None）。"""
+    'Recursively convert NumPy values and nonfinite numbers to JSON values; NaN/Inf become None.'
     import math as _math
 
     if isinstance(obj, dict):
@@ -136,7 +129,7 @@ def _json_safe(obj):
         return [_json_safe(v) for v in obj.tolist()]
     if obj is None or isinstance(obj, (str, bool)):
         return obj
-    # 兜底：其余类型交给默认处理（可能仍会报错，但已覆盖本项目数据类型）
+    # Let the JSON encoder handle any remaining unsupported type.
     return obj
 
 
@@ -225,15 +218,6 @@ async def api_calculate(request: Request, background_tasks: BackgroundTasks):
             body = await request.json()
             if not isinstance(body, dict):
                 raise HTTPException(status_code=422, detail="Request must be a JSON object")
-            # ---- 后端接收入口：打印收到的 JSON Payload 关键字段 ----
-            _ap = body.get("array_points")
-            if isinstance(_ap, list) and len(_ap) > 0:
-                _cols = len(_ap[0]) if isinstance(_ap[0], (list, tuple)) else 0
-                print(f"[SIM] 入口收到 array_points: shape=[{len(_ap)} x {_cols}], 数值={_ap}")
-            else:
-                print(f"[SIM] 入口收到 array_points: 缺失或格式异常 = {_ap}")
-            print(f"[SIM] 入口收到 lever_arm = {body.get('lever_arm')}, "
-                  f"modes = {body.get('modes')}")
             task_id = str(uuid.uuid4())[:12]
             TASK_STORE[task_id] = {
                 "progress": 0,
@@ -291,12 +275,7 @@ async def api_calculate(request: Request, background_tasks: BackgroundTasks):
             gnss_bytes = await gnss_file.read() if gnss_file else None
             delay_bytes = await delay_file.read() if delay_file else None
             svp_bytes = await svp_file.read() if svp_file else None
-            # ---- 后端接收入口：打印实测 multipart 关键字段 ----
-            print(f"[REAL] 入口收到 lever_arm=[{lever_dx}, {lever_dy}, {lever_dz}], "
-                  f"solver_type={solver_type}, beacon_ids={beacon_ids}")
-            print(f"[REAL] 入口收到文件: gnss={len(gnss_bytes) if gnss_bytes else 0}B, "
-                  f"delay={len(delay_bytes) if delay_bytes else 0}B, "
-                  f"svp={len(svp_bytes) if svp_bytes else 0}B")
+            await form.close()
             background_tasks.add_task(
                 _run_realdatabackground, task_id,
                 gnss_bytes, delay_bytes, svp_bytes,
@@ -331,8 +310,8 @@ def get_progress(task_id: str):
     info = TASK_STORE.get(task_id)
     if info is None:
         raise HTTPException(status_code=404, detail=f"Task '{task_id}' not found")
-    # 结果里可能含 NaN/inf（无效候选的 gdop=np.inf、rmse=np.nan），
-    # 直接序列化会抛 ValueError → 500 且无 CORS 头，必须先清洗。
+    # Invalid candidates may contain NaN or infinity.
+    # Convert them before encoding the polling response.
     return JSONResponse(content=_json_safe({k:v for k,v in info.items() if not k.startswith('_')}))
 
 
@@ -519,7 +498,7 @@ def _run_realdatabackground(
         # --- Build GNSS ENU array (antenna position, before lever arm) --------------
         n_gnss = len(gnss_data)
         gnss_ship_enu = enu_matrix(lats_all, lons_all, alts_all, ref_lat, ref_lon)
-        #  ESKF INS/GNSS 松组合自动检测与融合  (v4.0)
+        # Detect and fuse loosely coupled INS/GNSS navigation.
         # ================================================================
         # Check for IMU sensor columns (gyro + accelerometer) in GNSS CSV
         IMU_GYRO_COLS  = ["gyro_x", "gyro_y", "gyro_z"]
@@ -537,7 +516,7 @@ def _run_realdatabackground(
 
         fused_trajectory_enu = None   # will be set by ESKF if IMU data available
         esfk_used = False
-        nav = None                    # ESKF_Navigator 实例 (21D 自标定需要)
+        nav = None                    # Navigator instance required by the 21-state calibration.
 
         if _has_raw_imu:
             print(f"[REAL-BG] IMU columns detected: gyro={_has_gyro}, accel={_has_accel}, att={_has_att}")
@@ -1094,7 +1073,7 @@ def _run_realdatabackground(
                 beacon_entry["sigma_n_m"] = result.get("sigma_n_m")
                 beacon_entry["sigma_u_m"] = result.get("sigma_u_m")
                 beacon_entry["n_sessions"] = result.get("n_sessions")
-            # 21D 自标定字段
+            # 21-state calibration fields.
             if result.get("sound_speed_bias_mps") is not None:
                 beacon_entry["sound_speed_bias_mps"] = result.get("sound_speed_bias_mps")
                 beacon_entry["system_delay_ms"] = result.get("system_delay_ms")
@@ -1252,20 +1231,7 @@ def _parse_csv_content(csv_text: str, file_type: str):
 # =====================================================================
 @app.post("/api/gnss/parse")
 async def api_gnss_parse(request: Request):
-    """
-    Upload a GNSS CSV file, parse lat/lon/alt, convert to ENU trajectory.
-    Also detects IMU columns (gyro_x, gyro_y, gyro_z, acc_x, acc_y, acc_z,
-    pitch, roll, heading) and returns their availability status.
-
-    Returns:
-      - trajectory:       [{x, y}]  ENU coordinate
-      - trajectory_latlon: [{lat, lon}]  经Latitude
-      - ref_lat, ref_lon: Reference origin
-      - n_points:         数据点数
-      - has_imu:          是否包含IMU传感器数据
-      - imu_columns:      检测到的IMU相关列名列表
-      - gnss_columns:     检测到的GNSS列名列表
-    """
+    'Parse a GNSS CSV into ENU and latitude/longitude tracks. Detect IMU and attitude columns and report their availability, reference origin, point count, and detected column names.'
     try:
         form = await request.form()
         gnss_file = form.get("gnss_file")

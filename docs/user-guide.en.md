@@ -55,9 +55,9 @@ npm ci
 .\start_all.bat
 ```
 
-After setup, double-click `start_all.bat` and open [SeaArrayCalib locally](http://127.0.0.1:5173/). The website uses port 5173 and the calculation service uses port 8000. Logs are written to `.run/`. The launcher does not install dependencies automatically.
+After setup, double-click `start_all.bat`. The launcher checks ports 8000 and 5173, stops identified previous SeaArrayCalib services, and restarts both services. Open [SeaArrayCalib locally](http://127.0.0.1:5173/). The website uses port 5173 and the calculation service uses port 8000. Logs are written to `.run/`. Unrelated programs occupying either port are reported and left running. The launcher does not install dependencies automatically.
 
-To stop the services, run this from the project directory:
+To stop both services, double-click `stop_all.bat`, or run this from the project directory:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File stop_web.ps1
@@ -250,7 +250,7 @@ Exports use saved results without rerunning calculations. Settings retain units,
 <a id="troubleshooting"></a>
 ## 11. Troubleshooting
 
-**The page opens but calculations fail:** check that the service on port 8000 is running and inspect `.run/` logs. Occupied ports are reported by the launcher; check whether this project is already running before stopping any process.
+**The page opens but calculations fail:** check that the service on port 8000 is running and inspect `.run/` logs. Double-click `start_all.bat` to detect and restart existing SeaArrayCalib services. If another application occupies a port, identify that application before freeing the port. Export any results you need before restarting.
 
 **No eligible route at a budget:** inspect candidate reasons, then check complete duration, scale, usable range, ray support, per-beacon coverage and GDOP. Change physical limits only when consistent with the actual equipment and task.
 

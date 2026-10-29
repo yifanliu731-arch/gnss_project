@@ -1,4 +1,4 @@
-/* ========== 全局样式 — 淡蓝色海洋主题 ========== */
+/* Global ocean-theme styles */
 
 :root {
   --bg-primary: #e8f4fd;
@@ -28,7 +28,7 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* ========== 基础重置 ========== */
+/* Base reset */
 *,
 *::before,
 *::after {
@@ -40,7 +40,7 @@ body {
   background: var(--bg-primary);
 }
 
-/* ========== 主应用容器：全屏 flex 列 ========== */
+/* Full-screen flex container */
 #app {
   display: flex;
   flex-direction: column;
@@ -48,7 +48,7 @@ body {
   background: var(--bg-white);
 }
 
-/* ========== 滚动条美化 ========== */
+/* Scrollbars */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -64,7 +64,7 @@ body {
   background: #8db8d0;
 }
 
-/* ========== 通用排版 ========== */
+/* Typography */
 h1, h2, h3, h4 {
   font-family: var(--font-sans);
   margin: 0;

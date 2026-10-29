@@ -1,20 +1,16 @@
-<!--
-  App.vue - Seafloor Array Calibration 主界面
-  左侧深蓝导航栏 + 顶部标题栏 + 中心淡蓝内容区
-  淡蓝色海洋主题风格
--->
+<!-- Main application shell with navigation, header and content. -->
 <template>
   <el-config-provider :locale="locale === 'zh' ? zhCn : en"><el-container class="app-shell">
-    <!-- ==================== 左侧导航栏 ==================== -->
+    <!-- Sidebar -->
     <el-aside class="app-sidebar" width="220px">
-      <!-- Logo 区域 -->
+      <!-- Logo -->
       <div class="sidebar-logo">
         <el-icon :size="28" color="#6cc4f5"><Ship /></el-icon>
         <span class="logo-text">SeaArrayCalib</span>
         <span class="logo-sub">{{ t("Array Calibration") }}</span>
       </div>
 
-      <!-- 导航菜单 -->
+      <!-- Navigation -->
       <el-menu
         :default-active="activeTab"
         class="sidebar-menu"
@@ -36,7 +32,7 @@
         </el-menu-item>
       </el-menu>
 
-      <!-- 底部信息 -->
+      <!-- Footer information -->
       <div class="sidebar-footer">
         <div class="footer-info">
           <el-icon :size="14"><InfoFilled /></el-icon>
@@ -46,9 +42,9 @@
       </div>
     </el-aside>
 
-    <!-- ==================== 右侧主区域 ==================== -->
+    <!-- Main region -->
     <el-container class="app-main-area">
-      <!-- 顶部标题栏 -->
+      <!-- Header -->
       <el-header class="app-header">
         <div class="header-left">
           <el-icon :size="22"><Position /></el-icon>
@@ -61,9 +57,9 @@
         </div>
       </el-header>
 
-      <!-- 主体内容区 -->
+      <!-- Content -->
       <el-main class="app-content">
-        <!-- 根据菜单切换显示对应组件 -->
+        <!-- Preserve component state while switching modes. -->
         <KeepAlive><component :is="activeTab === 'simulation' ? SimulationMode : RealDataMode" /></KeepAlive>
       </el-main>
     </el-container>
@@ -86,17 +82,15 @@ import SimulationMode from './components/SimulationMode.vue'
 import RealDataMode from './components/RealDataMode.vue'
 import { testConnection } from './api'
 
-/** 当前激活的导航项 */
+/** Active navigation item. */
 const activeTab = ref<'simulation' | 'realdata'>('simulation')
 
-/**
- * 菜单选择回调
- */
+/** Handle navigation selection. */
 function handleMenuSelect(index: string) {
   activeTab.value = index as 'simulation' | 'realdata'
 }
 
-/** 页面加载时自动测试后端连接 */
+/** Check backend availability on mount. */
 onMounted(() => {
   testConnection()
 })
@@ -104,7 +98,7 @@ onMounted(() => {
 
 <style scoped>
 /* ================================================================ */
-/*  整体 Shell                                                      */
+/* Application shell */
 /* ================================================================ */
 .app-shell {
   height: 100vh;
@@ -113,7 +107,7 @@ onMounted(() => {
 }
 
 /* ================================================================ */
-/*  左侧导航栏                                                      */
+/* Sidebar */
 /* ================================================================ */
 .app-sidebar {
   background: linear-gradient(180deg, #0d3b66 0%, #0a2d4d 100%) !important;
@@ -124,7 +118,7 @@ onMounted(() => {
   z-index: 10;
 }
 
-/* --- Logo 区域 --- */
+/* Logo */
 .sidebar-logo {
   display: flex;
   flex-direction: column;
@@ -148,7 +142,7 @@ onMounted(() => {
   letter-spacing: 1px;
 }
 
-/* --- 导航菜单 --- */
+/* Navigation */
 .sidebar-menu {
   flex: 1;
   border-right: none;
@@ -190,7 +184,7 @@ onMounted(() => {
   margin-bottom: 2px;
 }
 
-/* --- 底部信息 --- */
+/* Footer */
 .sidebar-footer {
   padding: 16px 16px 20px;
   border-top: 1px solid rgba(108, 196, 245, 0.12);
@@ -212,14 +206,14 @@ onMounted(() => {
 }
 
 /* ================================================================ */
-/*  右侧主区域                                                      */
+/* Main region */
 /* ================================================================ */
 .app-main-area {
   background: #e8f4fd;
   flex-direction: column;
 }
 
-/* --- 顶部标题栏 --- */
+/* Header */
 .app-header {
   display: flex;
   align-items: center;
@@ -253,7 +247,7 @@ onMounted(() => {
   gap: 12px;
 }
 
-/* --- 主体内容区 --- */
+/* Content */
 .app-content {
   flex: 1;
   padding: 16px 20px;
@@ -262,7 +256,7 @@ onMounted(() => {
 }
 
 /* ================================================================ */
-/*  响应式：小屏收起侧边栏                                          */
+/* Collapse the sidebar on small screens. */
 /* ================================================================ */
 @media (max-width: 768px) {
   .app-sidebar {

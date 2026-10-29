@@ -1,15 +1,10 @@
-<!--
-  RealDataMode.vue - Field data组件 (v2.3)
-  左栏（宽 md="17"）：结果展示区
-  右栏（窄 md="7"）：Input files区
-  上传文件时自动实时更新图表
--->
+<!-- Field inputs and plots; uploaded files update previews immediately. -->
 <template>
   <div class="real-data-mode"><p class="field-scope">{{ t("Joint calibration estimates all selected beacon coordinates with shared acoustic parameters. Single-beacon fitting uses the same propagation and estimation model independently for each beacon.") }}</p>
     <el-row :gutter="20">
-      <!-- ==================== 左栏：结果展示区 ==================== -->
+      <!-- Results -->
       <el-col :xs="24" :sm="24" :md="17" :lg="17" :xl="17">
-        <!-- Sound-speed profile图 -->
+        <!-- Sound-speed profile -->
         <el-card class="panel-card" shadow="hover">
           <template #header>
             <div class="panel-header">
@@ -21,7 +16,7 @@
           <SSPProfileChart :raw-points="sspRawPoints" :transducer-depth="Math.abs(leverArm[2])" />
         </el-card>
 
-        <!-- Survey track图表 (ENU) -->
+        <!-- ENU track -->
         <el-card class="panel-card" shadow="hover">
           <template #header>
             <div class="panel-header">
@@ -39,7 +34,7 @@
           <div v-else class="chart-placeholder"><el-icon :size="40" color="#c0c4cc"><TrendCharts /></el-icon><p>{{ t("Upload a GNSS position file to view the track") }}</p></div>
         </el-card>
 
-        <!-- Survey track图表 (经Latitude) -->
+        <!-- Latitude/longitude track -->
         <el-card class="panel-card" shadow="hover">
           <template #header><div class="panel-header"><el-icon><DataAnalysis /></el-icon><span>{{ t("Survey track (geographic)") }}</span></div></template>
           <el-radio-group v-model="trackDisplayMode" size="small" :aria-label="t('Geographic track display')" class="track-display-controls">
@@ -124,7 +119,7 @@
         <ResultExportPanel v-if="beaconResultList.length && !isProcessing" :key="runTaskId" :task-id="runTaskId" kind="field" :rows="beaconResultList"/>
       </el-col>
 
-      <!-- ==================== 右栏：Input files区 ==================== -->
+      <!-- Input files -->
       <el-col :xs="24" :sm="24" :md="7" :lg="7" :xl="7">
         <el-card class="panel-card" shadow="hover">
           <template #header><div class="panel-header"><el-icon><Upload /></el-icon><span>{{ t("Input files") }}</span></div></template>
@@ -268,7 +263,7 @@ const sspN = ref(0)
 
 function handleExceed() { localizedMessage.warning('Remove the existing file before uploading another') }
 
-/** GNSS 上传 → 实时解析轨迹并显示图表 */
+/** Parse uploaded GNSS data and update track previews. */
 async function handleGnssFileChange(file: UploadFile, _files: UploadFiles) {
   console.log('[RealData] GNSS file changed:', file.name, file.uid)
   const raw = file?.raw as File|undefined
@@ -293,7 +288,7 @@ async function handleGnssFileChange(file: UploadFile, _files: UploadFiles) {
   }
 }
 
-/** SVP 上传 → 实时解析Sound-speed profile并显示图表 */
+/** Parse the uploaded SSP and update the profile preview. */
 let sspRequestId = 0
 async function handleSvpFileChange(file: UploadFile, _files: UploadFiles) {
   const requestId = ++sspRequestId

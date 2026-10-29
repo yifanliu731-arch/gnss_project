@@ -1,8 +1,4 @@
-<!--
-  TrajectoryLatLonChart.vue - 经Latitude轨迹图表
-  接收轨迹经Latitude数据，使用 ECharts 渲染
-  在Reference origin位置标记星形符号
--->
+<!-- Latitude/longitude track with a star at the reference origin. -->
 <template>
   <div class="latlon-chart">
     <div ref="chartRef" class="chart-box-latlon" role="img" :aria-label="t('Survey track in longitude and latitude')"></div>
@@ -63,7 +59,7 @@ function handleResize() {
 function updateChart() {
   if (!chart || chart.isDisposed()) return
 
-  // 空值/类型防护：数据未加载或格式错误时退化为空数组，避免 data.map 崩溃
+  // Missing or invalid input becomes an empty track.
   const source = Array.isArray(props.trajectoryData) ? props.trajectoryData : []
   const points = source
     .filter((p): p is LatLonPoint => p != null && typeof p.lat === 'number' && typeof p.lon === 'number')
@@ -98,8 +94,8 @@ function updateChart() {
     tooltip: {
       trigger: 'item',
       formatter: (params: any) => {
-        // 空值/类型防护：markPoint 的 data 是 {name, coord, value} 对象，
-        // line 的 data 是 [lon, lat] 数组；只有数组才可解构。
+        // markPoint values are objects; line samples are coordinate arrays.
+        // Destructure coordinate arrays only.
         const d = params?.data
         if (!Array.isArray(d)) return ''
         const lon = d[0]

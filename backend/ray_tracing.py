@@ -1,15 +1,4 @@
-"""
-Web 后端声线追踪引擎 —— 与 SeaArrayCalib/src/ray_tracing.py 一致的 Snell 打靶实现。
-
-唯一引擎：Snell 打靶（Brent 求根），失败时直线 + 平均声速回退。
-不再依赖 BELLHOP Fortran 子进程 / BellhopPy / 静态 SQLite 查表。
-
-Public API
-----------
-- calculate_travel_time(trans_pos, beacon_pos)            -> float (秒)
-- calculate_acoustic_range(trans_pos, beacon_pos)         -> float (米)
-- calculate_acoustic_range_with_method(trans_pos, beacon_pos) -> (float, str)
-"""
+'Web acoustic tracer using layered Snell shooting and Brent root finding. A straight-line / equivalent-speed fallback is exposed explicitly when shooting fails. Public methods return travel time in seconds, acoustic arc length in metres, and the method label. No external ray executable or static lookup database is required.'
 
 import numpy as np
 from scipy.optimize import root_scalar
@@ -18,11 +7,7 @@ from typing import Optional, Tuple
 
 
 def normalize_ssp_columns(df: pd.DataFrame) -> pd.DataFrame:
-    """将常见 SSP 列名模糊匹配重命名为 RayTracer 必需的标准名。
-
-    兼容: ``Depth (m)`` / ``Depth_m`` / ``depth`` / ``z`` / ``深度``,
-          ``SV (m/s)`` / ``Velocity_mps`` / ``velocity`` / ``sv`` / ``声速``。
-    """
+    'Normalize common depth and sound-speed column aliases, including supported Chinese headers, to Depth (m) and SV (m/s).'
     df = df.copy()
     depth_col = None
     sv_col = None
@@ -76,7 +61,7 @@ def ssp_equivalent_speed(df: pd.DataFrame) -> float:
 
 
 class RayTracer:
-    """Snell 打靶声线引擎（唯一引擎 + 直线回退）。"""
+    'Layered Snell shooting with an explicitly labelled straight-line fallback.'
 
     def __init__(self, df_ssp_simplified: pd.DataFrame, use_cache: bool = True):
         # --- SSP Setup ---
@@ -84,11 +69,11 @@ class RayTracer:
         self.Z = df["Depth (m)"].values.astype(np.float64)
         self.V = df["SV (m/s)"].values.astype(np.float64)
 
-        # 保存原始 SSP 参考深度，供求解器做声线剖面“参考下界”（非海底）。
+        # Keep the original SSP depth as the measured support boundary, not the seabed.
         self.Z_orig = self.Z.copy()
         self.V_orig = self.V.copy()
 
-        # 深水延伸，保证 Snell 打靶覆盖深水基准点（web 保留外推到 6000 m）。
+        # The web tracer extends the nominal SSP to 6000 m to support deep beacons.
         self._extend_ssp_to_deep()
 
         self.c_eq_measured = self.equivalent_speed_global(
@@ -96,14 +81,14 @@ class RayTracer:
         )
         self.delta_c = 0.0
 
-        # 高速缓存: (z_src, z_rcv, range_m) -> (delay_s, arc_len_m, method)
-        # use_cache=False 供最小二乘迭代使用：缓存键按 0.1m 舍入会吞掉
-        # 数值雅可比的微小位置变化，导致 XY 梯度为 0、解冻死在初始值。
+        # Cache (source depth, receiver depth, horizontal range) to (time, arc length, method).
+        # Disable rounded caching during least squares: rounding to 0.1 m can hide
+        # finite-difference position changes and make horizontal derivatives vanish.
         self.use_cache = use_cache
         self._cache: dict = {}
 
     # ==================================================================
-    #  SSP 深水延伸
+    # Deep nominal SSP extension.
     # ==================================================================
     def _extend_ssp_to_deep(self):
         z_max = self.Z[-1]
@@ -144,7 +129,7 @@ class RayTracer:
         return delay, method
 
     # ==================================================================
-    #  Vectorized batch API  (N pings × single beacon — LS 热路径专用)
+    # Vectorized API for many pings to one beacon in the least-squares loop.
     # ==================================================================
     def calculate_travel_time_batch(
         self, trans_pos: np.ndarray, beacon_pos: np.ndarray
@@ -207,7 +192,7 @@ class RayTracer:
         return delay, arc_len, method
 
     def equivalent_speed_global(self, z_top: Optional[float] = None, z_bot: Optional[float] = None) -> float:
-        """SSP 谐波平均声速。默认只积分实测段（Z_orig），不含外推深水层。"""
+        'Harmonic-mean SSP speed; by default integrate measured support only, excluding deep nominal extrapolation.'
         z = np.asarray(self.Z, dtype=np.float64)
         v = np.clip(np.asarray(self.V, dtype=np.float64), 1e-6, None)
         z_orig = getattr(self, "Z_orig", None)
@@ -227,10 +212,7 @@ class RayTracer:
     def _resolve_batch(
         self, trans_pos: np.ndarray, beacon_pos: np.ndarray
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """
-        批量解算 (N 个观测点同一信标): 返回 (delay_s, arc_len_m, snell_ok).
-        snell_ok[i]=True 表示第 i 条声线由 Snell 打靶收敛, 否则走直线回退.
-        """
+        'Return (delay_s, arc_len_m, snell_ok) for pings to one beacon. snell_ok marks converged Snell rays; other supported rays use the straight-line fallback.'
         trans = np.asarray(trans_pos, dtype=np.float64)
         b = np.asarray(beacon_pos, dtype=np.float64).reshape(-1)
         N = trans.shape[0]
@@ -246,9 +228,9 @@ class RayTracer:
 
         geom_ok = z_rcv >= z_src
 
-        # 按换能器深度分组 (1cm 量化)。实测必须严格打靶且精确：1cm 深度差对
-        # 3000m 声线引入的弧长误差 ~ 毫米级（远小于声学噪声 ~75mm），
-        # 用组内中位数近似即可，不再用 0.5m 粗分箱引入可测系统误差。
+        # Group transducer depths at 1 cm resolution and use each group median.
+        # For a 3000 m ray the resulting arc-length approximation is millimetric,
+        # below the stated acoustic noise; coarse 0.5 m depth bins were unsuitable.
         q = np.round(z_src, 2)
         for qv in np.unique(q):
             sel = (q == qv) & geom_ok
@@ -261,7 +243,7 @@ class RayTracer:
             arc_len[sel] = a
             snell_ok[sel] = ok
 
-        # 直线 + 平均声速回退 (Snell 失败的几何合法点)
+        # Straight-line / equivalent-speed fallback for geometrically valid failed rays.
         fallback = geom_ok & ~snell_ok
         if np.any(fallback):
             v_surface = float(self._velocity(0.0))
@@ -281,8 +263,8 @@ class RayTracer:
     def _resolve(
         self, trans_pos: np.ndarray, beacon_pos: np.ndarray
     ) -> Tuple[float, float, str]:
-        """解算 (delay_s, arc_len_m, method)。"""
-        # 深度统一按“正值向下”；几何非法直接 FAIL。
+        'Return (delay_s, arc_len_m, method).'
+        # Normalize depths positive downward; reject invalid source/receiver geometry.
         z_src = abs(float(trans_pos[2]))
         z_rcv = abs(float(beacon_pos[2]))
         if z_rcv < z_src:
@@ -300,12 +282,12 @@ class RayTracer:
         arc_len = np.nan
         method = "FAIL"
 
-        # 1) Snell 打靶
+        # First attempt Snell shooting.
         delay, arc_len = self._solve_snell_eigenray(range_m, z_src, z_rcv)
         if not np.isnan(delay):
             method = "Snell"
 
-        # 2) 直线 + 平均声速回退
+        # Then use the straight-line / equivalent-speed fallback.
         if np.isnan(delay):
             method = "StraightLine"
             v_surface = float(self._velocity(0.0))
@@ -323,13 +305,13 @@ class RayTracer:
         return result
 
     # ==================================================================
-    #  SSP 求值
+    # Evaluate the SSP.
     # ==================================================================
     def _velocity(self, z: float) -> float:
         return float(np.interp(z, self.Z, self.V)) + self.delta_c
 
     # ==================================================================
-    #  Snell 打靶 —— Brent 求根
+    # Snell shooting with Brent root finding.
     # ==================================================================
     def _get_effective_ssp(self, z_start: float, z_end: float) -> Tuple[np.ndarray, np.ndarray]:
         if z_start > z_end:
@@ -375,10 +357,7 @@ class RayTracer:
     def _solve_snell_eigenray_batch(
         self, range_m: np.ndarray, z_src: float, z_rcv: float
     ) -> Tuple[np.ndarray, np.ndarray]:
-        """
-        向量化 Snell 本征声线打靶: 同一深度切片下, 对多条声线并行二分求根.
-        Returns: (delay_s, arc_len_m), 阴影区/未收敛为 NaN.
-        """
+        'Batched Snell shooting by bisection on a common depth grid. Return (delay_s, arc_len_m), with NaN for shadow-zone or unconverged rays.'
         range_m = np.atleast_1d(np.asarray(range_m, dtype=np.float64))
         M = range_m.shape[0]
         delay = np.full(M, np.nan, dtype=np.float64)
@@ -389,7 +368,7 @@ class RayTracer:
 
         Z_eff, V_eff = self._get_effective_ssp(z_src, z_rcv)
 
-        # 近垂直声线 (range ≈ 0)
+        # Near-vertical ray (horizontal range approximately zero).
         vert = range_m < 1e-3
         if np.any(vert):
             _, t0, s0 = self._shoot_ray_snell(0.0, Z_eff, V_eff)
@@ -404,7 +383,7 @@ class RayTracer:
         r_sel = range_m[sel]
         M2 = r_sel.shape[0]
 
-        # 阴影区判定: 最大掠射角声线都够不到 → 无解
+        # Reject shadow-zone ranges beyond the limiting monotone ray.
         hi = np.full(M2, p_max)
         Xhi = self._shoot_ray_snell_batch(hi, Z_eff, V_eff)[0]
         active = Xhi >= r_sel
@@ -429,10 +408,7 @@ class RayTracer:
     def _shoot_ray_snell_batch(
         p: np.ndarray, Z_eff: np.ndarray, V_eff: np.ndarray
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """
-        向量化常梯度层 Snell 追迹: p 为 (M,) 射线参数数组, 返回 (X, T, S) 各 (M,).
-        与标量 _shoot_ray_snell 物理映射完全一致.
-        """
+        'Trace constant-gradient layers for an array of ray parameters. Return horizontal distance X, time T, and arc length S, using the scalar Snell mapping.'
         p = np.atleast_1d(np.asarray(p, dtype=np.float64))
         Z_eff = np.asarray(Z_eff, dtype=np.float64)
         V_eff = np.asarray(V_eff, dtype=np.float64)
@@ -459,17 +435,17 @@ class RayTracer:
             denom = pp * Gb
             small_denom = np.abs(denom) < 1e-12
 
-            # 等声速层
+            # Constant-speed layer.
             dx_eq = (pp * v1b / cos1) * dzb
             dt_eq = dzb / (v1b * cos1)
 
-            # 梯度层
+            # Constant-gradient layer.
             dx_gr = (cos1 - cos2) / np.where(small_denom, 1.0, denom)
             dt_gr = (1.0 / np.where(g_zero, 1.0, Gb)) * np.log(
                 (v2b * (1.0 + cos1)) / (v1b * (1.0 + cos2))
             )
 
-            # 近垂直 + 梯度层 (denom≈0): 平均声速线性化
+            # Near-vertical gradient layer: linearize with the mean layer speed.
             v_mid = 0.5 * (v1b + v2b)
             dx_small = pp * v_mid * dzb
             dt_small = dzb / v_mid
@@ -477,7 +453,7 @@ class RayTracer:
             dx = np.where(g_zero, dx_eq, np.where(small_denom, dx_small, dx_gr))
             dt = np.where(g_zero, dt_eq, np.where(small_denom, dt_small, dt_gr))
 
-            # 垂直声线
+            # Vertical ray.
             dt_vert_eq = dzb / v1b
             dt_vert_gr = np.abs(
                 (1.0 / np.where(g_zero, 1.0, Gb)) * np.log(v2b / v1b)
@@ -486,7 +462,7 @@ class RayTracer:
             dx = np.where(near_vert, 0.0, dx)
             dt = np.where(near_vert, dt_vert, dt)
 
-            # 全反射 → inf
+            # Total reflection: return infinity.
             dx = np.where(refl, np.inf, dx)
             dt = np.where(refl, np.inf, dt)
 
@@ -497,10 +473,7 @@ class RayTracer:
 
     @staticmethod
     def _shoot_ray_snell(p: float, Z_eff: np.ndarray, V_eff: np.ndarray) -> Tuple[float, float, float]:
-        """
-        常梯度层 Snell 定律追迹。
-        返回: (水平距离_X, 旅行时_T, 弧长_S)。
-        """
+        'Trace constant-gradient Snell layers; return horizontal distance, travel time, and arc length.'
         G = np.diff(V_eff) / np.diff(Z_eff)
         X_total, T_total, S_total = 0.0, 0.0, 0.0
 

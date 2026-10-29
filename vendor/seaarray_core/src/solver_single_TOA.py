@@ -1,10 +1,4 @@
-"""
-Single-Way Kinematic Solver (TOA + WLS + per-session clock + MAD)
-观测方程在走时域建立，平差乘固定实测段 C_EQ；输出残差再乘局部 c_eq。
-天顶改正 lock_k=True（默认 k≡0）；free_k 时估 k·d_h²。换能器时延 ≡ 0。
-默认 lock_eof=True：c1=c2≡0，射线用 V_bg。EOF 只进观测 σ，不进状态。
-参数向量: [E, N, U, k] + 每航次 [B, D1, D2, c1, c2]（锁 EOF 时 c1=c2 钳在 0）
-"""
+'One-way kinematic TOA solver with weighted least squares, session clocks, and MAD filtering. Form observations in travel time, adjust with measured-support C_EQ, and report residuals using local equivalent speed. lock_k fixes the zenith term to zero; otherwise fit k*d_h**2. Transducer delay is zero. lock_eof fixes c1=c2=0: EOF modes enter observation sigma only. States are [E,N,U,k] plus [B,D1,D2,c1,c2] for each session.'
 import numpy as np
 import pandas as pd
 from scipy.optimize import least_squares
@@ -29,7 +23,7 @@ SIGMA_ZENITH = 0.05
 
 
 def detect_sessions(t_seconds, gap_s=SESSION_GAP_S):
-    """按时间间隔切航次。返回 (session_id, n_sess)，session_id 与 t_seconds 等长。"""
+    'Split sessions by time gaps; return session indices matching t_seconds and the session count.'
     t = np.asarray(t_seconds, dtype=np.float64).reshape(-1)
     n = len(t)
     if n == 0:
@@ -47,7 +41,7 @@ def detect_sessions(t_seconds, gap_s=SESSION_GAP_S):
 
 
 def session_breakpoints(t_seconds, gap_s=SESSION_GAP_S):
-    """由一组时间戳得到航次分界（用于多信标共用同一航次划分）。"""
+    'Derive shared session boundaries from timestamps.'
     t = np.sort(np.asarray(t_seconds, dtype=np.float64).reshape(-1))
     if len(t) == 0:
         return np.array([-np.inf, np.inf])
@@ -68,7 +62,7 @@ def assign_sessions(t_seconds, breaks):
 
 
 def session_tau(t_seconds, session):
-    """航次内中心化小时时间，以及每 ping 对应的 tau^2 均值（正交化 D2）。"""
+    'Center session time in hours and orthogonalize the quadratic drift term.'
     t = np.asarray(t_seconds, dtype=np.float64).reshape(-1)
     session = np.asarray(session, dtype=int).reshape(-1)
     tau = np.zeros(len(t), dtype=np.float64)
@@ -97,7 +91,7 @@ def sess_offset(k):
 
 
 def dominant_session(session, n_sess, t_seconds=None):
-    """ping 数最多的航次；并列时取跨度最长。"""
+    'Choose the session with most pings, breaking ties by longest time span.'
     if n_sess <= 0:
         return 0
     counts = np.array([int(np.sum(session == k)) for k in range(n_sess)])
@@ -314,7 +308,7 @@ class SingleWaySolver:
         _batch_both_m = getattr(self.tracer, "calculate_travel_time_and_range_with_method_batch", None)
         _batch_both = getattr(self.tracer, "calculate_travel_time_and_range_batch", None)
         _rx_pos_arr = np.column_stack([rx_pos[:, 0], rx_pos[:, 1], rx_pos[:, 2]])
-        # 单站声线缓存：钟差扰动不改声线，与联合解 RTCache 同思路。不影响联合代码。
+        # Single-station ray cache: clock-only changes do not alter the ray geometry.
         _rt_cache = {}
         _trace_mask = np.ones(n_pings, dtype=bool)
 
@@ -322,7 +316,7 @@ class SingleWaySolver:
             t_ray = np.full(n_pings, np.nan, dtype=np.float64)
             s_arc = np.full(n_pings, np.nan, dtype=np.float64)
             methods = np.full(n_pings, "FAIL", dtype=object)
-            # 位置用原值做键：钟差扰动时 P 完全不变，可命中；不 round，避免吞掉数值雅可比步长
+            # Use exact position keys: rounding could hide numerical Jacobian steps.
             P_key = (float(beacon_pos[0]), float(beacon_pos[1]), float(beacon_pos[2]))
             for k in range(n_sess):
                 idx = np.flatnonzero((session == k) & _trace_mask)

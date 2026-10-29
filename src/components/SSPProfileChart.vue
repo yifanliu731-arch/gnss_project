@@ -1,8 +1,4 @@
-<!--
-  SSPProfileChart.vue - Sound-speed profile图 (Sound Speed Profile)
-  X 轴：Sound speed (m/s), Y 轴：深度 (m, 从上到下)
-  展示上传剖面原值，不进行平滑或抽稀
--->
+<!-- Plot original SSP knots: sound speed horizontally, positive depth downward. No smoothing or decimation. -->
 <template>
   <div class="ssp-profile-chart">
     <div ref="chartRef" class="chart-box"></div>
@@ -21,7 +17,7 @@ interface SSPPoint {
 
 const props = defineProps<{
   rawPoints: SSPPoint[]
-  transducerDepth?: number  // Transducer depth (m, 正值), 画一条红线
+  transducerDepth?: number  // Positive transducer depth in metres; displayed as a red line.
 }>()
 
 const chartRef = ref<HTMLDivElement>()

@@ -1,9 +1,4 @@
-<!--
-  RealResidualChart.vue - Residual series散点图（可配置标题和单位）
-  X 轴：历元序号, Y 轴：Residual
-  用于展示时延Residual (ms) 或等效距离Residual (m)
-  响应式：窗口 resize 自动重绘
--->
+<!-- Responsive residual scatter plot with configurable units and outlier flags. -->
 <template>
   <div class="real-residual-chart">
     <p v-if="summary" class="residual-summary">{{ t('Retained observations') }}: {{ summary.n }} · RMS: {{ summary.rms.toFixed(4) }} {{ unit }} · {{ t('Maximum absolute residual') }}: {{ summary.max.toFixed(4) }} {{ unit }}</p>
@@ -17,7 +12,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import * as echarts from 'echarts'
 
 interface ResidualPoint {
-  epoch: number    // 历元序号
+  epoch: number    // Epoch index.
   value: number    // Residual
   beacon_id?: number
   source_time?: string
@@ -25,10 +20,10 @@ interface ResidualPoint {
 
 const props = defineProps<{
   data: ResidualPoint[]
-  outlierMask?: boolean[]   // 异常点标记 (true=异常)
-  title?: string            // 图表标题，默认 "Residual series"
-  yAxisName?: string        // Y 轴单位，默认 "Residual"
-  unit?: string             // tooltip 显示单位，默认 ""
+  outlierMask?: boolean[]   // True marks an outlier.
+  title?: string            // Plot title.
+  yAxisName?: string        // Vertical-axis units.
+  unit?: string             // Tooltip units.
 }>()
 
 const chartRef = ref<HTMLDivElement>()
@@ -74,7 +69,7 @@ function updateChart() {
   })
   const mean = sum / props.data.length
 
-  // 自动计算 Y 轴范围 (±3σ 或 ±maxAbs)
+  // Set the vertical range from three standard deviations or the largest residual.
   const values = props.data.map(p => p.value)
   const std = Math.sqrt(values.reduce((s, v) => s + (v - mean) ** 2, 0) / values.length)
   const yMax = Math.max(maxAbs * 1.15, std * 4, 1)

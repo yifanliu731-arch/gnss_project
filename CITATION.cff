@@ -1,0 +1,14 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite the repository and the exact version or commit used."
+type: software
+title: SeaArrayCalib
+authors:
+  - family-names: Liu
+    given-names: Yifan
+    orcid: "https://orcid.org/0009-0007-0224-2600"
+version: 0.1.0
+date-released: 2026-10-29
+repository-code: "https://github.com/yifanliu731-arch/gnss_project"
+url: "https://github.com/yifanliu731-arch/gnss_project"
+license: MIT
+abstract: "A local web application for complete GNSS-A survey trajectory planning, declared sound-field risk evaluation, and joint calibration of seafloor beacon coordinates."

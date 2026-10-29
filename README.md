@@ -11,12 +11,13 @@ SeaArrayCalib 提供完整航迹规划、声场风险评价和多信标联合标
 - [中文使用说明](docs/user-guide.zh-CN.md)：从启动和首次仿真，到风险半径、尺度细化、剖面验证、实测标定、结果解释与导出。
 - [English user guide](docs/user-guide.en.md): capabilities, setup, first run, parameters, refinement, profile validation, field calibration, results and troubleshooting.
 - [Numerical workflow / 模型与计算流程](docs/model.md) · [CSV formats / 数据格式](docs/data-format.md).
+- [Paper simulation reproduction / 论文仿真复现](docs/reproducibility.md): fixed candidate pool, original noise streams, held-out dates and numerical regression checks.
 
 Both guides describe the same current features. Use the guides for operation and the numerical workflow for model assumptions and implementation limits.
 
 ## Quick start / 一键启动
 
-**Windows:** after the first-time setup below, double-click **`start_all.bat`**. It starts the API and website at <http://127.0.0.1:5173/> and writes logs to `.run/`. The launcher keeps the console free; occupied ports are reported. It never installs dependencies automatically.
+**Windows:** after the first-time setup below, double-click **`start_all.bat`**. It checks ports 8000 and 5173, stops identified previous SeaArrayCalib services, and starts the API and website at <http://127.0.0.1:5173/>. Logs are written to `.run/`. Double-click **`stop_all.bat`** to stop both services. Export results before restarting, because calculation results are held in API memory. Unrelated port owners are reported and left running. The launcher keeps service windows hidden and never installs dependencies automatically.
 
 **首次使用：**安装 Python 3.12 和 Node.js 22（22.12 或更新），在项目目录执行：
 
@@ -97,7 +98,7 @@ python -X utf8 -m unittest discover -s backend -p "test_*.py"
 npm run build
 ```
 
-The bundled numerical modules are tracked by a source-hash manifest. Run `scripts/sync_core.py` to verify their integrity. Numerical changes require regression checks and updated validation.
+The bundled numerical modules are tracked by byte hashes and executable-AST fingerprints. Run `scripts/sync_core.py` to verify integrity; `--source ../SeaArrayCalib` additionally checks the recorded upstream revision. English documentation differs from upstream comments, and the portable configuration retains only imported exports. Numerical changes require regression checks and updated validation; source refreshes must be reviewed before updating the manifest.
 
 The UTF-8 flag keeps fixture decoding consistent on Windows systems whose default encoding differs from the supplied UTF-8 data.
 
